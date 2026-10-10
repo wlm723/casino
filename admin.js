@@ -1,81 +1,29 @@
-// Admin tool for the play-money casino. Run from the project folder:  node admin.js <command> ...
-const { DatabaseSync } = require("node:sqlite");
+// Admin tool for the casino. Run from the project folder: node admin.js <command> ...
 const bcrypt = require("bcryptjs");
-const fs = require("fs");
+const database = require("./database");
 
-const DB_FILE = process.env.DB || "casino.db";
-if (!fs.existsSync(DB_FILE)) { console.error(`No ${DB_FILE} here. Run this from the project folder.`); process.exit(1); }
-const db = new DatabaseSync(DB_FILE);
-const [cmd, name, arg] = process.argv.slice(2);
+const MAX_CHIPS = 2_147_483_647;
+const [command, username, argument] = process.argv.slice(2);
 
-const getUser = (n) => {
-  const u = n && db.prepare("SELECT id, username, chips FROM users WHERE username = ?").get(n);
-  if (!u) { console.error(`User "${n}" not found.`); process.exit(1); }
-  return u;
-};
-const needInt = (v) => {
-  const n = Number(v);
-  if (!Number.isInteger(n)) { console.error("Amount must be a whole number."); process.exit(1); }
-  return n;
-};
+async function getUser(name) {
+  const { rows } = await database.query(
+    "SELECT id, username, chips, created_at FROM users WHERE LOWER(username) = LOWER($1)",
+    [name || ""]
+  );
+  if (!rows[0]) throw new Error(`User "${name}" not found.`);
+  return rows[0];
+}
 
-switch (cmd) {
-  case "list": {
-    const rows = db.prepare("SELECT username, chips, created_at FROM users ORDER BY chips DESC").all();
-    rows.forEach((r) => console.log(`${r.username.padEnd(20)} ${String(r.chips).padStart(10)}  joined ${new Date(r.created_at).toISOString().slice(0, 10)}`));
-    console.log(`${rows.length} user(s)`);
-    break;
+function needAmount(value) {
+  const amount = Number(value);
+  if (!Number.isSafeInteger(amount) || Math.abs(amount) > MAX_CHIPS) {
+    throw new Error(`Amount must be a whole number between -${MAX_CHIPS} and ${MAX_CHIPS}.`);
   }
-  case "show": {
-    const u = getUser(name);
-    const s = db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ? AND expires_at > ?").get(u.id, Date.now());
-    console.log(`${u.username}: ${u.chips} chips, ${s.n} active session(s)`);
-    break;
-  }
-  case "give": {            // add (or subtract with a negative number)
-    const u = getUser(name), amt = needInt(arg);
-    const chips = Math.max(0, u.chips + amt);
-    db.prepare("UPDATE users SET chips = ? WHERE id = ?").run(chips, u.id);
-    console.log(`${u.username}: ${u.chips} -> ${chips}`);
-    break;
-  }
-  case "set": {
-    const u = getUser(name), amt = needInt(arg);
-    if (amt < 0) { console.error("Chips can't be negative."); process.exit(1); }
-    db.prepare("UPDATE users SET chips = ? WHERE id = ?").run(amt, u.id);
-    console.log(`${u.username}: ${u.chips} -> ${amt}`);
-    break;
-  }
-  case "passwd": {
-    const u = getUser(name);
-    if (!arg || arg.length < 8 || arg.length > 72) { console.error("Password must be 8-72 characters."); process.exit(1); }
-    db.prepare("UPDATE users SET pass_hash = ? WHERE id = ?").run(bcrypt.hashSync(arg, 12), u.id);
-    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(u.id); // log them out everywhere
-    console.log(`Password changed for ${u.username}; their sessions were ended.`);
-    break;
-  }
-  case "kick": {            // end all of a user's login sessions
-    const u = getUser(name);
-    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(u.id);
-    console.log(`${u.username} logged out everywhere.`);
-    break;
-  }
-  case "delete": {
-    const u = getUser(name);
-    if (arg !== "--yes") { console.error(`This permanently deletes ${u.username}. Re-run with --yes to confirm.`); process.exit(1); }
-    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(u.id);
-    db.prepare("DELETE FROM users WHERE id = ?").run(u.id);
-    console.log(`Deleted ${u.username}.`);
-    break;
-  }
-  case "backup": {
-    const out = `casino-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.db`;
-    db.exec(`VACUUM INTO '${out}'`);   // safe copy even while the server is running
-    console.log(`Saved ${out}`);
-    break;
-  }
-  default:
-    console.log(`Usage: node admin.js <command>
+  return amount;
+}
+
+function showUsage() {
+  console.log(`Usage: node admin.js <command>
 
   list                       all users and balances
   show <user>                one user's balance and sessions
@@ -84,5 +32,90 @@ switch (cmd) {
   passwd <user> <newpass>    reset a password (logs them out)
   kick <user>                end all their sessions
   delete <user> --yes        permanently remove an account
-  backup                     save a timestamped copy of the database`);
+
+Use the Neon console to manage database backups.`);
 }
+
+async function run() {
+  switch (command) {
+    case "list": {
+      const { rows } = await database.query(
+        "SELECT username, chips, created_at FROM users ORDER BY chips DESC"
+      );
+      rows.forEach((user) => {
+        const joined = new Date(Number(user.created_at)).toISOString().slice(0, 10);
+        console.log(`${user.username.padEnd(20)} ${String(user.chips).padStart(10)}  joined ${joined}`);
+      });
+      console.log(`${rows.length} user(s)`);
+      return;
+    }
+    case "show": {
+      const user = await getUser(username);
+      const { rows } = await database.query(
+        "SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = $1 AND expires_at > $2",
+        [user.id, Date.now()]
+      );
+      console.log(`${user.username}: ${user.chips} chips, ${rows[0].count} active session(s)`);
+      return;
+    }
+    case "give": {
+      const user = await getUser(username);
+      const amount = needAmount(argument);
+      const balance = Math.max(0, user.chips + amount);
+      if (balance > MAX_CHIPS) throw new Error(`Balance cannot exceed ${MAX_CHIPS} chips.`);
+      await database.query("UPDATE users SET chips = $1 WHERE id = $2", [balance, user.id]);
+      console.log(`${user.username}: ${user.chips} -> ${balance}`);
+      return;
+    }
+    case "set": {
+      const user = await getUser(username);
+      const balance = needAmount(argument);
+      if (balance < 0) throw new Error("Chips can't be negative.");
+      await database.query("UPDATE users SET chips = $1 WHERE id = $2", [balance, user.id]);
+      console.log(`${user.username}: ${user.chips} -> ${balance}`);
+      return;
+    }
+    case "passwd": {
+      const user = await getUser(username);
+      if (!argument || argument.length < 8 || argument.length > 72) {
+        throw new Error("Password must be 8-72 characters.");
+      }
+      await database.query(
+        `WITH password_change AS (
+           UPDATE users SET pass_hash = $1 WHERE id = $2
+         )
+         DELETE FROM sessions WHERE user_id = $2`,
+        [bcrypt.hashSync(argument, 12), user.id]
+      );
+      console.log(`Password changed for ${user.username}; their sessions were ended.`);
+      return;
+    }
+    case "kick": {
+      const user = await getUser(username);
+      await database.query("DELETE FROM sessions WHERE user_id = $1", [user.id]);
+      console.log(`${user.username} logged out everywhere.`);
+      return;
+    }
+    case "delete": {
+      const user = await getUser(username);
+      if (argument !== "--yes") {
+        throw new Error(`This permanently deletes ${user.username}. Re-run with --yes to confirm.`);
+      }
+      await database.query("DELETE FROM users WHERE id = $1", [user.id]);
+      console.log(`Deleted ${user.username}.`);
+      return;
+    }
+    case "help":
+    case undefined:
+      showUsage();
+      return;
+    default:
+      showUsage();
+      throw new Error(`Unknown command "${command}".`);
+  }
+}
+
+run().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
