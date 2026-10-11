@@ -526,7 +526,8 @@
     const DEFAULT_ROWS = 12;
     const DEFAULT_WAGER = 10;
     const MIN_WAGER_CENTS = 10;
-    const STEP_MS = 70;
+    const STEP_MS = 130;
+    const SLOWDOWN_POWER = 0.72;
     // Display copy of the server tables (PLINKO_TABLES in server.js).
     // Server payouts are authoritative.
     const TABLES = {
@@ -843,7 +844,9 @@
           let squashTimer = 0;
           let frameCount = 0;
           function frame(now) {
-            const t = stepDur === 0 ? 1 : Math.min((now - started) / (rows * stepDur), 1);
+            const raw = stepDur === 0 ? 1 : Math.min((now - started) / (rows * stepDur), 1);
+            // Suspense ramp: early steps fly, final steps crawl.
+            const t = Math.pow(raw, SLOWDOWN_POWER);
             const f = Math.min(t * rows, rows - 0.0001);
             const i = Math.floor(f);
             const st = f - i;
@@ -885,7 +888,7 @@
           }
           requestAnimationFrame(frame);
         });
-        if (!reduced) await delay(120);
+        if (!reduced) await delay(380);
       } catch (error) {
         console.error("Plinko animation failed:", error);
       }
