@@ -17,15 +17,19 @@
       -moz-osx-font-smoothing: grayscale;
     }
 
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    button, input, select, a { touch-action: manipulation; }
 
     body {
       min-width: 320px;
       min-height: 100vh;
+      min-height: 100dvh;
       margin: 0;
       padding: 24px 14px;
-      display: grid;
-      place-items: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       background:
         radial-gradient(ellipse at 50% -12%, rgba(111, 71, 161, .27), transparent 42%),
         radial-gradient(ellipse at 95% 40%, rgba(179, 124, 48, .08), transparent 30%),
@@ -72,6 +76,7 @@
       align-items: center;
       justify-content: center;
       gap: 30px;
+      margin: auto 0;
     }
 
     .side-art {
@@ -121,7 +126,7 @@
 
     .theme-toggle {
       display: inline-flex;
-      min-height: 36px;
+      min-height: 44px;
       align-items: center;
       margin: 10px 0 14px;
       padding: 0 14px;
@@ -185,6 +190,7 @@
       flex: 1;
       min-width: 0;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       background: #55555c;
     }
 
@@ -314,7 +320,7 @@
     }
 
     .lanes-select {
-      min-height: 38px;
+      min-height: 44px;
       padding: 0 10px;
       border: 1px solid #504264;
       border-radius: 10px;
@@ -329,6 +335,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-wrap: wrap;
       gap: 8px;
       margin-bottom: 10px;
     }
@@ -373,7 +380,7 @@
     }
 
     .diff-btn {
-      min-height: 40px;
+      min-height: 44px;
       border: 1px solid transparent;
       border-radius: 10px;
       background: transparent;
@@ -426,7 +433,7 @@
     .hist-chip.bad { background: rgba(255, 155, 136, .12); color: #ff9b88; }
 
     .sound-btn {
-      min-height: 38px;
+      min-height: 44px;
       padding: 0 12px;
       border: 1px solid #504264;
       border-radius: 10px;
@@ -499,6 +506,7 @@
 
     @media (max-width: 520px) {
       body { padding: 14px 8px; }
+      input, select { font-size: 16px; }
       .lane { flex-basis: 84px; min-width: 84px; }
       .manhole { width: 52px; height: 52px; }
       .lane-bird { min-height: 2.4rem; font-size: 2.2rem; }
