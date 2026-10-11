@@ -436,6 +436,9 @@
     const DEFAULT_ROWS = 4;
     const DEFAULT_WAGER = 10;
     const MIN_WAGER_CENTS = 10;
+    // Must match PICK_MULTIPLIERS in server.js. Server payouts are authoritative;
+    // this copy is only for showing the ladder before a round starts.
+    const STEP_MULTIPLIERS = [0.8, 1.5, 2.5, 5, 10, 20, 40, 100];
     const settingsForm = document.querySelector("#settings");
     const rowCountInput = document.querySelector("#row-count");
     const wagerInput = document.querySelector("#wager");
@@ -465,8 +468,17 @@
     let roundId = null;
     let settingsDirty = false;
 
+    function ladderText(rowCount) {
+      return STEP_MULTIPLIERS.slice(0, rowCount)
+        .map((mult, step) => `row ${rowCount - step}: ×${mult}`)
+        .join(" → ");
+    }
+
     function updateModeRules() {
-      modeRules.textContent = "Play responsibly and take breaks.";
+      const odds = gameMode === "luck"
+        ? "Luck mode: half the boxes in each row are safe (~50% per pick)."
+        : "Fixed mode: the base row is always safe; rows above it are not.";
+      modeRules.textContent = `${odds} Safe picks pay multipliers on your bet, climbing from the base: ${ladderText(rows)}. Play responsibly and take breaks.`;
     }
 
     function updateTheme(theme, updateRoundMode = false) {
@@ -662,6 +674,12 @@
           });
           roundId = round.roundId;
           balanceCents = round.balanceCents;
+          if (Array.isArray(round.multipliers) && round.multipliers.length === rows) {
+            round.multipliers.forEach((mult, step) => {
+              if (typeof mult === "number" && mult > 0) STEP_MULTIPLIERS[step] = mult;
+            });
+            updateModeRules();
+          }
           betPlaced = true;
           updateBalanceDisplay();
           updateWagerLimit();
@@ -698,7 +716,10 @@
         }
 
         wins += 1;
-        const payoutCents = Math.floor(wagerCents / 2);
+        const payoutCents = Number.isSafeInteger(result.payoutCents) && result.payoutCents >= 0
+          ? result.payoutCents
+          : Math.floor(wagerCents * (Number(result.multiplier) || 0));
+        const multiplierLabel = Number(result.multiplier) > 0 ? `×${result.multiplier}` : "×—";
         winsDisplay.textContent = wins;
         updateBalanceDisplay();
         currentRow = result.currentRow;
@@ -708,7 +729,7 @@
         }
 
         roundBusy = false;
-        message.textContent = `Safe pick! ${formatCurrency(payoutCents)} returned (50% of your bet). Choose a box in row ${currentRow + 1}.`;
+        message.textContent = `Safe pick ${multiplierLabel}! ${formatCurrency(payoutCents)} returned. Choose a box in row ${currentRow + 1}.`;
         message.className = "message win";
         cashOutButton.hidden = false;
         updateActiveRow(true);

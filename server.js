@@ -8,6 +8,17 @@ const database = require("./database");
 const START_BALANCE_CENTS = 10000;
 const MIN_WAGER_CENTS = 10;
 const MAX_WAGER_CENTS = 10000;
+// Universal Pick-a-Box payout ladder: per-safe-pick multiplier by step climbed
+// from the base row (step 0) toward the top. Step 0 stays below 1x so the
+// first row never returns the full stake; later rows pay big, like a casino
+// ladder. Note: this ladder is generous (virtual euros only) — expected
+// return exceeds the stake, so balances can grow fast.
+const PICK_MULTIPLIERS = [0.8, 1.5, 2.5, 5, 10, 20, 40, 100];
+const multiplierForStep = (step) => (
+  Number.isInteger(step) && step >= 0 && step < PICK_MULTIPLIERS.length
+    ? PICK_MULTIPLIERS[step]
+    : 0
+);
 const SESSION_MS = 7 * 24 * 3600 * 1000;
 const PORT = process.env.PORT || 3000;
 
@@ -196,7 +207,8 @@ app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
   res.status(201).json({
     roundId: createdRows[0].round_id,
     currentRow: rows - 1,
-    balanceCents: safeCents(createdRows[0].balance_cents)
+    balanceCents: safeCents(createdRows[0].balance_cents),
+    multipliers: PICK_MULTIPLIERS.slice(0, rows)
   });
 }));
 
@@ -231,7 +243,9 @@ app.post("/api/pickbox/rounds/:roundId/pick", authenticate, asyncRoute(async (re
     ? (row === 0 ? "won" : "active")
     : "lost";
   const nextRow = wonPick && row > 0 ? row - 1 : row;
-  const payoutCents = wonPick ? Math.floor(Number(round.wager_cents) / 2) : 0;
+  const stepIndex = Number(round.row_count) - 1 - row;
+  const multiplier = wonPick ? multiplierForStep(stepIndex) : 0;
+  const payoutCents = wonPick ? Math.floor(Number(round.wager_cents) * multiplier) : 0;
   const { rows: updatedRows } = await database.query(
     `WITH changed_round AS (
        UPDATE pickbox_rounds
@@ -264,6 +278,8 @@ app.post("/api/pickbox/rounds/:roundId/pick", authenticate, asyncRoute(async (re
     status,
     currentRow: Number(updatedRows[0].current_row),
     balanceCents: safeCents(updatedRows[0].balance_cents),
+    payoutCents: safeCents(payoutCents),
+    multiplier,
     safeColumns: completed ? round.safe_columns : undefined
   });
 }));

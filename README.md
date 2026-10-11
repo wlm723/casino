@@ -13,7 +13,7 @@ Account and session data are stored in Neon Postgres.
 The server creates the required tables and indexes on the first database request.
 Existing accounts in a local SQLite database are not copied automatically; the Neon database starts with no accounts.
 
-Pick a Box uses one combined theme-and-mode switch: light theme selects Luck mode, while dark theme selects Fixed outcomes. Luck mode assigns one randomly selected safe box per row on the server, and the game displays the odds and payout rules before play.
+Pick a Box uses one combined theme-and-mode switch: light theme selects Luck mode, while dark theme selects Fixed outcomes. Each safe pick pays a multiplier on the bet that climbs from the base row toward the top (×0.8, ×1.5, ×2.5, ×5, ×10, ×20, ×40, ×100 for rows 1-8; the base row always pays less than the stake), and the game displays the odds and payout ladder before play.
 
 ## Deploy to Vercel
 
