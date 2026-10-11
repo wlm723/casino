@@ -211,11 +211,11 @@ app.get("/api/me", authenticate, (req, res) => {
   res.json({ username: req.user.username, balanceCents: safeCents(req.user.balance_cents) });
 });
 
-async function haveSuffix(req) {
+async function haveSuffix(req, wagerCents) {
   try {
     const { rows } = await database.query("SELECT balance_cents FROM users WHERE id = $1", [req.user.id]);
     if (!rows[0] || rows[0].balance_cents == null) return "";
-    return ` Balance is €${(Number(rows[0].balance_cents) / 100).toFixed(2)}.`;
+    return ` Bet was €${(Number(wagerCents) / 100).toFixed(2)}, balance is €${(Number(rows[0].balance_cents) / 100).toFixed(2)}.`;
   } catch {
     return "";
   }
@@ -255,39 +255,43 @@ app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
     return columns.slice(0, columns.length / 2);
   });
 
-  const { rows: createdRows } = await database.query(
-    `WITH debited AS (
-       UPDATE users
-       SET balance_cents = balance_cents - $2
-       WHERE id = $1 AND balance_cents >= $2
-       RETURNING balance_cents
-     ),
-     abandoned AS (
-       UPDATE pickbox_rounds
-       SET status = 'abandoned', updated_at = $7
-       WHERE user_id = $1 AND status = 'active'
-         AND EXISTS (SELECT 1 FROM debited)
-       RETURNING id
-     ),
-     created AS (
-       INSERT INTO pickbox_rounds
-       (id, user_id, mode, row_count, current_row, wager_cents, status, safe_columns, created_at, updated_at)
-       SELECT $3, $1, $4, $5, $6, $2, 'active', $8::jsonb, $7, $7
-       FROM debited
-       RETURNING id
-     )
-     SELECT created.id AS round_id, debited.balance_cents
-     FROM created CROSS JOIN debited`,
-    [req.user.id, wagerCents, id, mode, rows, rows - 1, now, JSON.stringify(safeColumns)]
+  // Plain sequential debit: one statement, matched rows checked directly.
+  const { rows: debitedRows } = await database.query(
+    `UPDATE users
+     SET balance_cents = balance_cents - $2
+     WHERE id = $1 AND balance_cents >= $2
+     RETURNING balance_cents`,
+    [req.user.id, wagerCents]
   );
-  if (!createdRows[0]) {
+  if (!debitedRows[0]) {
     logShortfall(req, wagerCents);
-    return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req)}` });
+    return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req, wagerCents)}` });
+  }
+  try {
+    await database.query(
+      `UPDATE pickbox_rounds
+       SET status = 'abandoned', updated_at = $2
+       WHERE user_id = $1 AND status = 'active'`,
+      [req.user.id, now]
+    );
+    await database.query(
+      `INSERT INTO pickbox_rounds
+       (id, user_id, mode, row_count, current_row, wager_cents, status, safe_columns, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'active', $7::jsonb, $8, $8)`,
+      [id, req.user.id, mode, rows, rows - 1, wagerCents, JSON.stringify(safeColumns), now]
+    );
+  } catch (error) {
+    // Never take money without recording the round: refund the debit.
+    await database.query(
+      "UPDATE users SET balance_cents = balance_cents + $1 WHERE id = $2",
+      [wagerCents, req.user.id]
+    ).catch(() => {});
+    throw error;
   }
   res.status(201).json({
-    roundId: createdRows[0].round_id,
+    roundId: id,
     currentRow: rows - 1,
-    balanceCents: safeCents(createdRows[0].balance_cents),
+    balanceCents: safeCents(debitedRows[0].balance_cents),
     multipliers: PICK_MULTIPLIERS.slice(0, rows)
   });
 }));
@@ -326,38 +330,38 @@ app.post("/api/pickbox/rounds/:roundId/pick", authenticate, asyncRoute(async (re
   const stepIndex = Number(round.row_count) - 1 - row;
   const multiplier = wonPick ? multiplierForStep(stepIndex) : 0;
   const payoutCents = wonPick ? Math.floor(Number(round.wager_cents) * multiplier) : 0;
-  const { rows: updatedRows } = await database.query(
-    `WITH changed_round AS (
-       UPDATE pickbox_rounds
-       SET status = $1, current_row = $2, updated_at = $3
-       WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_row = $6
-       RETURNING status, current_row
-     ),
-     credited AS (
-       UPDATE users
-       SET balance_cents = balance_cents + $7
-       WHERE id = $5 AND $8::boolean
-         AND EXISTS (SELECT 1 FROM changed_round)
-       RETURNING balance_cents
-     )
-     SELECT changed_round.status, changed_round.current_row,
-       COALESCE(
-         (SELECT balance_cents FROM credited),
-         (SELECT balance_cents FROM users WHERE id = $5)
-       ) AS balance_cents
-     FROM changed_round`,
-    [status, nextRow, Date.now(), roundId, req.user.id, row, payoutCents, wonPick]
+  const { rows: changedRows } = await database.query(
+    `UPDATE pickbox_rounds
+     SET status = $1, current_row = $2, updated_at = $3
+     WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_row = $6
+     RETURNING status, current_row`,
+    [status, nextRow, Date.now(), roundId, req.user.id, row]
   );
-  if (!updatedRows[0]) {
+  if (!changedRows[0]) {
     return res.status(409).json({ error: "That pick was already submitted. Please try again." });
+  }
+  let balanceRows;
+  if (wonPick && payoutCents > 0) {
+    ({ rows: balanceRows } = await database.query(
+      `UPDATE users
+       SET balance_cents = balance_cents + $1
+       WHERE id = $2
+       RETURNING balance_cents`,
+      [payoutCents, req.user.id]
+    ));
+  } else {
+    ({ rows: balanceRows } = await database.query(
+      "SELECT balance_cents FROM users WHERE id = $1",
+      [req.user.id]
+    ));
   }
 
   const completed = status !== "active";
   res.json({
     safe: wonPick,
     status,
-    currentRow: Number(updatedRows[0].current_row),
-    balanceCents: safeCents(updatedRows[0].balance_cents),
+    currentRow: Number(changedRows[0].current_row),
+    balanceCents: safeCents(balanceRows[0].balance_cents),
     payoutCents: safeCents(payoutCents),
     multiplier,
     safeColumns: completed ? round.safe_columns : undefined
@@ -445,39 +449,43 @@ app.post("/api/chicken/rounds", authenticate, asyncRoute(async (req, res) => {
   const now = Date.now();
   const id = crypto.randomUUID();
 
-  const { rows: createdRows } = await database.query(
-    `WITH debited AS (
-       UPDATE users
-       SET balance_cents = balance_cents - $2
-       WHERE id = $1 AND balance_cents >= $2
-       RETURNING balance_cents
-     ),
-     abandoned AS (
-       UPDATE chicken_rounds
-       SET status = 'abandoned', updated_at = $6
-       WHERE user_id = $1 AND status = 'active'
-         AND EXISTS (SELECT 1 FROM debited)
-       RETURNING id
-     ),
-     created AS (
-       INSERT INTO chicken_rounds
-       (id, user_id, lane_count, current_lane, wager_cents, status, lanes, created_at, updated_at, mode, difficulty)
-       SELECT $3, $1, $4, 0, $2, 'active', $5::jsonb, $6, $6, $7, $8
-       FROM debited
-       RETURNING id
-     )
-     SELECT created.id AS round_id, debited.balance_cents
-     FROM created CROSS JOIN debited`,
-    [req.user.id, wagerCents, id, lanes, JSON.stringify(laneSafe), now, mode, difficulty]
+  // Plain sequential debit: one statement, matched rows checked directly.
+  const { rows: debitedRows } = await database.query(
+    `UPDATE users
+     SET balance_cents = balance_cents - $2
+     WHERE id = $1 AND balance_cents >= $2
+     RETURNING balance_cents`,
+    [req.user.id, wagerCents]
   );
-  if (!createdRows[0]) {
+  if (!debitedRows[0]) {
     logShortfall(req, wagerCents);
-    return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req)}` });
+    return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req, wagerCents)}` });
+  }
+  try {
+    await database.query(
+      `UPDATE chicken_rounds
+       SET status = 'abandoned', updated_at = $2
+       WHERE user_id = $1 AND status = 'active'`,
+      [req.user.id, now]
+    );
+    await database.query(
+      `INSERT INTO chicken_rounds
+       (id, user_id, lane_count, current_lane, wager_cents, status, lanes, created_at, updated_at, mode, difficulty)
+       VALUES ($1, $2, $3, 0, $4, 'active', $5::jsonb, $6, $6, $7, $8)`,
+      [id, req.user.id, lanes, wagerCents, JSON.stringify(laneSafe), now, mode, difficulty]
+    );
+  } catch (error) {
+    // Never take money without recording the round: refund the debit.
+    await database.query(
+      "UPDATE users SET balance_cents = balance_cents + $1 WHERE id = $2",
+      [wagerCents, req.user.id]
+    ).catch(() => {});
+    throw error;
   }
   res.status(201).json({
-    roundId: createdRows[0].round_id,
+    roundId: id,
     currentLane: 0,
-    balanceCents: safeCents(createdRows[0].balance_cents),
+    balanceCents: safeCents(debitedRows[0].balance_cents),
     difficulty,
     multipliers: chickenLadder(difficulty).slice(0, lanes)
   });
@@ -510,38 +518,38 @@ app.post("/api/chicken/rounds/:roundId/cross", authenticate, asyncRoute(async (r
   const nextLane = safe ? lane + 1 : lane;
   const multiplier = safe ? chickenMultiplierForStep(round.difficulty, lane) : 0;
   const payoutCents = safe ? Math.floor(Number(round.wager_cents) * multiplier) : 0;
-  const { rows: updatedRows } = await database.query(
-    `WITH changed_round AS (
-       UPDATE chicken_rounds
-       SET status = $1, current_lane = $2, updated_at = $3
-       WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_lane = $6
-       RETURNING status, current_lane
-     ),
-     credited AS (
-       UPDATE users
-       SET balance_cents = balance_cents + $7
-       WHERE id = $5 AND $8::boolean
-         AND EXISTS (SELECT 1 FROM changed_round)
-       RETURNING balance_cents
-     )
-     SELECT changed_round.status, changed_round.current_lane,
-       COALESCE(
-         (SELECT balance_cents FROM credited),
-         (SELECT balance_cents FROM users WHERE id = $5)
-       ) AS balance_cents
-     FROM changed_round`,
-    [status, nextLane, Date.now(), roundId, req.user.id, lane, payoutCents, safe]
+  const { rows: changedRows } = await database.query(
+    `UPDATE chicken_rounds
+     SET status = $1, current_lane = $2, updated_at = $3
+     WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_lane = $6
+     RETURNING status, current_lane`,
+    [status, nextLane, Date.now(), roundId, req.user.id, lane]
   );
-  if (!updatedRows[0]) {
+  if (!changedRows[0]) {
     return res.status(409).json({ error: "That crossing was already submitted. Please try again." });
+  }
+  let balanceRows;
+  if (safe && payoutCents > 0) {
+    ({ rows: balanceRows } = await database.query(
+      `UPDATE users
+       SET balance_cents = balance_cents + $1
+       WHERE id = $2
+       RETURNING balance_cents`,
+      [payoutCents, req.user.id]
+    ));
+  } else {
+    ({ rows: balanceRows } = await database.query(
+      "SELECT balance_cents FROM users WHERE id = $1",
+      [req.user.id]
+    ));
   }
 
   const completed = status !== "active";
   res.json({
     safe,
     status,
-    currentLane: Number(updatedRows[0].current_lane),
-    balanceCents: safeCents(updatedRows[0].balance_cents),
+    currentLane: Number(changedRows[0].current_lane),
+    balanceCents: safeCents(balanceRows[0].balance_cents),
     payoutCents: safeCents(payoutCents),
     multiplier,
     lanes: completed ? round.lanes : undefined
@@ -673,45 +681,47 @@ app.post("/api/plinko/drop", authenticate, asyncRoute(async (req, res) => {
   const multiplier = table[slot];
   const payoutCents = Math.floor(wagerCents * multiplier);
 
-  const { rows: updatedRows } = await database.query(
-    `WITH debited AS (
-       UPDATE users
-       SET balance_cents = balance_cents - $2
-       WHERE id = $1 AND balance_cents >= $2
-       RETURNING balance_cents
-     ),
-     played AS (
-       INSERT INTO plinko_rounds
-       (id, user_id, row_count, risk, wager_cents, multiplier, payout_cents, created_at, mode)
-       SELECT $3, $1, $4, $5, $2, $6::numeric, $7, $8, $9
-       FROM debited
-       RETURNING id
-     ),
-     credited AS (
-       UPDATE users
-       SET balance_cents = balance_cents + $7
-       WHERE id = $1
-         AND EXISTS (SELECT 1 FROM played)
-       RETURNING balance_cents
-     )
-     SELECT (SELECT balance_cents FROM credited) AS balance_cents,
-       (SELECT balance_cents FROM users WHERE id = $1) AS have_cents`,
-    [req.user.id, wagerCents, id, rows, risk, String(multiplier), payoutCents, now, mode]
+  // Plain sequential debit: one statement, matched rows checked directly.
+  const { rows: debitedRows } = await database.query(
+    `UPDATE users
+     SET balance_cents = balance_cents - $2
+     WHERE id = $1 AND balance_cents >= $2
+     RETURNING balance_cents`,
+    [req.user.id, wagerCents]
   );
-  if (!updatedRows[0] || updatedRows[0].balance_cents == null) {
+  if (!debitedRows[0]) {
     logShortfall(req, wagerCents);
-    const have = updatedRows[0] && updatedRows[0].have_cents != null
-      ? ` Bet was €${(Number(wagerCents) / 100).toFixed(2)}, balance is €${(Number(updatedRows[0].have_cents) / 100).toFixed(2)}.`
-      : "";
-    return res.status(409).json({ error: `Insufficient balance for that bet.${have}` });
+    return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req, wagerCents)}` });
   }
-  res.status(201).json({
-    slot,
-    multiplier,
-    payoutCents: safeCents(payoutCents),
-    path,
-    balanceCents: safeCents(updatedRows[0].balance_cents)
-  });
+  try {
+    await database.query(
+      `INSERT INTO plinko_rounds
+       (id, user_id, row_count, risk, wager_cents, multiplier, payout_cents, created_at, mode)
+       VALUES ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9)`,
+      [id, req.user.id, rows, risk, wagerCents, String(multiplier), payoutCents, now, mode]
+    );
+    const { rows: creditedRows } = await database.query(
+      `UPDATE users
+       SET balance_cents = balance_cents + $1
+       WHERE id = $2
+       RETURNING balance_cents`,
+      [payoutCents, req.user.id]
+    );
+    res.status(201).json({
+      slot,
+      multiplier,
+      payoutCents: safeCents(payoutCents),
+      path,
+      balanceCents: safeCents(creditedRows[0].balance_cents)
+    });
+  } catch (error) {
+    // Never take money without recording the round: refund the debit.
+    await database.query(
+      "UPDATE users SET balance_cents = balance_cents + $1 WHERE id = $2",
+      [wagerCents, req.user.id]
+    ).catch(() => {});
+    throw error;
+  }
 }));
 
 app.use((error, req, res, next) => {
