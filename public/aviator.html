@@ -194,7 +194,7 @@
       overflow: hidden;
       border: 1px solid rgba(255, 120, 130, .3);
       border-radius: 22px;
-      background: #12060b;
+      background: linear-gradient(180deg, #2b0f18 0%, #1c0a11 55%, #12060b 100%);
       box-shadow: inset 0 0 35px rgba(0, 0, 0, .5), 0 10px 30px rgba(0, 0, 0, .25);
     }
 
@@ -224,7 +224,10 @@
       font-weight: 900;
       font-variant-numeric: tabular-nums;
       text-shadow: 0 4px 26px rgba(220, 50, 60, .55);
+      transition: transform .2s ease;
     }
+
+    .mult-number.hot { color: #ffd166; text-shadow: 0 4px 30px rgba(255, 180, 60, .75); }
 
     .mult-number.cashed { color: #83e2a7; text-shadow: 0 4px 26px rgba(60, 200, 120, .55); }
     .mult-number.crashed { color: #ff6b6b; }
@@ -351,6 +354,11 @@
       background: linear-gradient(180deg, #2cbb75, #188653);
       box-shadow: 0 5px 0 #0a4b2c;
       color: #f4ffef;
+      animation: betpulse 2.2s ease-in-out infinite;
+    }
+
+    @keyframes betpulse {
+      50% { box-shadow: 0 5px 0 #0a4b2c, 0 0 26px rgba(44, 187, 117, .55); }
     }
 
     .fly-btn.cash {
@@ -580,11 +588,40 @@
       lockable.forEach((control) => { control.disabled = disabled; });
     }
 
+    // Deterministic starfield + trail state for the sky.
+    const STARS = Array.from({ length: 70 }, (_, i) => ({
+      x: ((i * 137.5) % 100) / 100,
+      y: ((i * 89.3) % 78) / 100,
+      r: 0.6 + ((i * 31) % 10) / 12,
+      phase: (i * 0.7) % (Math.PI * 2)
+    }));
+    let trail = [];
+    let headPos = { x: 0, y: 0 };
+
     function drawGraph(currentMult) {
       const ctx = graph.getContext("2d");
       const W = graph.width;
       const H = graph.height;
+      const nowT = performance.now();
       ctx.clearRect(0, 0, W, H);
+      // twinkling stars
+      STARS.forEach((star) => {
+        ctx.globalAlpha = 0.25 + 0.3 * (0.5 + 0.5 * Math.sin(nowT / 700 + star.phase));
+        ctx.fillStyle = "#ffd9dc";
+        ctx.beginPath();
+        ctx.arc(star.x * W, star.y * H, star.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      // moon
+      ctx.save();
+      ctx.shadowColor = "rgba(255, 240, 200, .8)";
+      ctx.shadowBlur = 24;
+      ctx.fillStyle = "#fdf3d8";
+      ctx.beginPath();
+      ctx.arc(W - 70, 52, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
       ctx.strokeStyle = "rgba(255, 255, 255, .07)";
       ctx.lineWidth = 1;
       for (let i = 1; i < 5; i += 1) {
@@ -597,17 +634,33 @@
       const span = 9000; // visible 9s window
       const elapsed = flying ? Date.now() - startedAt : frozenElapsed;
       const from = Math.max(0, elapsed - span);
-      ctx.strokeStyle = "#e5484d";
-      ctx.lineWidth = 3;
+      const xAt = (t) => 20 + ((t - from) / Math.max(span, elapsed || 1)) * (W - 40);
+      const yAt = (m) => H - 24 - (Math.log(m) / Math.log(top)) * (H - 60);
+      // contrail
+      if (trail.length > 1) {
+        for (let i = 1; i < trail.length; i += 1) {
+          ctx.strokeStyle = `rgba(229, 72, 77, ${0.05 + (0.4 * i) / trail.length})`;
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+          ctx.lineTo(trail[i].x, trail[i].y);
+          ctx.stroke();
+        }
+      }
+      // gradient curve, red low → gold high
+      const grad = ctx.createLinearGradient(0, H, 0, 0);
+      grad.addColorStop(0, "#e5484d");
+      grad.addColorStop(1, "#f0c96b");
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 3.5;
       ctx.shadowColor = "rgba(229, 72, 77, .7)";
       ctx.shadowBlur = 12;
       ctx.beginPath();
       const steps = 90;
       for (let i = 0; i <= steps; i += 1) {
         const t = from + ((elapsed - from) * i) / steps;
-        const m = multAt(t);
-        const x = 20 + ((t - from) / Math.max(span, elapsed || 1)) * (W - 40);
-        const y = H - 24 - (Math.log(m) / Math.log(top)) * (H - 60);
+        const x = xAt(t);
+        const y = yAt(multAt(t));
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
@@ -615,11 +668,12 @@
       ctx.shadowBlur = 0;
       // plane rides the line head, tilted along its climb
       const headMult = flying ? multAt(elapsed) : currentMult;
-      const hx = 20 + ((elapsed - from) / Math.max(span, elapsed || 1)) * (W - 40);
-      const hy = H - 24 - (Math.log(Math.min(headMult, top)) / Math.log(top)) * (H - 60);
-      const px = 20 + ((Math.max(0, elapsed - 400) - from) / Math.max(span, elapsed || 1)) * (W - 40);
-      const py = H - 24 - (Math.log(Math.min(multAt(Math.max(0, elapsed - 400)), top)) / Math.log(top)) * (H - 60);
+      const hx = xAt(elapsed);
+      const hy = yAt(Math.min(headMult, top));
+      const px = xAt(Math.max(from, elapsed - 400));
+      const py = yAt(Math.min(multAt(Math.max(from, elapsed - 400)), top));
       const angle = Math.atan2(hy - py, hx - px) || -0.35;
+      headPos = { x: hx, y: hy };
       ctx.save();
       ctx.translate(hx, hy);
       ctx.rotate(Math.max(-0.9, Math.min(-0.08, angle)));
@@ -631,6 +685,7 @@
     function setActionBet() {
       actionButton.className = "fly-btn bet";
       actionButton.innerHTML = "BET";
+      multDisplay.style.transform = "";
     }
 
     function setActionCash() {
@@ -648,7 +703,11 @@
       const elapsed = Date.now() - startedAt;
       const m = multAt(elapsed);
       multDisplay.textContent = `×${m.toFixed(2)}`;
+      multDisplay.classList.toggle("hot", m >= 10);
+      multDisplay.style.transform = `scale(${(1 + Math.min(0.22, (m - 1) * 0.02)).toFixed(3)})`;
       drawGraph(m);
+      trail.push({ x: headPos.x, y: headPos.y });
+      if (trail.length > 60) trail.shift();
       const whole = Math.floor(m);
       if (whole > lastTick) {
         lastTick = whole;
@@ -771,6 +830,7 @@
           setControlsDisabled(true);
           flying = true;
           lastTick = 1;
+          trail = [];
           multDisplay.className = "mult-number";
           multDisplay.textContent = "×1.00";
           message.textContent = "Flying! Cash out before it crashes.";
