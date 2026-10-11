@@ -19,7 +19,9 @@ const multiplierForStep = (step) => (
     ? PICK_MULTIPLIERS[step]
     : 0
 );
-const SESSION_MS = 7 * 24 * 3600 * 1000;
+const SESSION_SHORT_MS = 24 * 3600 * 1000; // default: browser session, 24h server expiry
+const SESSION_LONG_MS = 30 * 24 * 3600 * 1000; // "keep me logged in": 30 days
+const TICKET_MS = 5 * 60 * 1000; // second-factor ticket lifetime
 const PORT = process.env.PORT || 3000;
 
 const app = express();
@@ -68,6 +70,7 @@ function maybeCleanup(now) {
   // Fire-and-forget: works on long-running servers and opportunistically on serverless.
   database.query("DELETE FROM sessions WHERE expires_at <= $1", [now]).catch(() => {});
   database.query("DELETE FROM auth_attempts WHERE window_start <= $1", [now - RATE_WINDOW_MS]).catch(() => {});
+  database.query("DELETE FROM login_tickets WHERE expires_at <= $1", [now]).catch(() => {});
 }
 function limit(req, res, next) {
   checkLimit(req, res, next).catch(next);
@@ -92,6 +95,28 @@ async function checkLimit(req, res, next) {
 
 const validUser = (u) => typeof u === "string" && /^[A-Za-z0-9_]{3,20}$/.test(u);
 const validPass = (p) => typeof p === "string" && p.length >= 8 && p.length <= 72;
+const sessionMeta = (req) => ({
+  ip: String(req.ip || "").slice(0, 64),
+  agent: String(req.headers["user-agent"] || "").slice(0, 200),
+});
+function sessionCookie(res, token, persistent) {
+  res.cookie("sid", token, {
+    httpOnly: true,
+    sameSite: "strict",
+    ...(persistent ? { maxAge: SESSION_LONG_MS } : {}),
+    secure: process.env.NODE_ENV === "production"
+  });
+}
+async function createSession(req, res, userId, persistent) {
+  const token = crypto.randomBytes(32).toString("hex");
+  const meta = sessionMeta(req);
+  const expires = Date.now() + (persistent ? SESSION_LONG_MS : SESSION_SHORT_MS);
+  await database.query(
+    "INSERT INTO sessions(token_hash, user_id, expires_at, created_at, user_agent, ip, persistent) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    [sha(token), userId, expires, Date.now(), meta.agent, meta.ip, persistent ? 1 : 0]
+  );
+  sessionCookie(res, token, persistent);
+}
 const safeCents = (value) => {
   let cents = value;
   if (typeof cents === "string") {
@@ -107,39 +132,18 @@ const safeCents = (value) => {
 };
 
 app.post("/api/signup", limit, asyncRoute(async (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password, remember } = req.body || {};
   if (!validUser(username)) return res.status(400).json({ error: "Username: 3-20 letters, numbers or _" });
   if (!validPass(password)) return res.status(400).json({ error: "Password must be 8-72 characters" });
 
-  const token = crypto.randomBytes(32).toString("hex");
+  const persistent = remember === true;
   const passHash = await bcrypt.hash(password, 12);
   try {
     const { rows } = await database.query(
-      `WITH new_user AS (
-         INSERT INTO users(username, pass_hash, balance_cents, created_at)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, username, balance_cents
-       ),
-       new_session AS (
-         INSERT INTO sessions(token_hash, user_id, expires_at)
-         SELECT $5, id, $6 FROM new_user
-       )
-       SELECT username, balance_cents FROM new_user`,
-      [
-        username,
-        passHash,
-        START_BALANCE_CENTS,
-        Date.now(),
-        sha(token),
-        Date.now() + SESSION_MS
-      ]
+      "INSERT INTO users(username, pass_hash, balance_cents, created_at) VALUES ($1, $2, $3, $4) RETURNING id, username, balance_cents",
+      [username, passHash, START_BALANCE_CENTS, Date.now()]
     );
-    res.cookie("sid", token, {
-      httpOnly: true,
-      sameSite: "strict",
-      maxAge: SESSION_MS,
-      secure: process.env.NODE_ENV === "production"
-    });
+    await createSession(req, res, rows[0].id, persistent);
     res.json({ username: rows[0].username, balanceCents: safeCents(rows[0].balance_cents) });
   } catch (error) {
     if (error.code === "23505") {
@@ -150,9 +154,9 @@ app.post("/api/signup", limit, asyncRoute(async (req, res) => {
 }));
 
 app.post("/api/login", limit, asyncRoute(async (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password, remember } = req.body || {};
   const result = validUser(username)
-    ? await database.query("SELECT id, username, pass_hash, balance_cents FROM users WHERE LOWER(username) = LOWER($1)", [username])
+    ? await database.query("SELECT id, username, pass_hash, balance_cents, totp_enabled FROM users WHERE LOWER(username) = LOWER($1)", [username])
     : { rows: [] };
   const user = result.rows[0];
   let ok = false;
@@ -166,17 +170,7 @@ app.post("/api/login", limit, asyncRoute(async (req, res) => {
     return res.status(401).json({ error: "Wrong username or password" });
   }
 
-  const token = crypto.randomBytes(32).toString("hex");
-  await database.query(
-    "INSERT INTO sessions(token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
-    [sha(token), user.id, Date.now() + SESSION_MS]
-  );
-  res.cookie("sid", token, {
-    httpOnly: true,
-    sameSite: "strict",
-    maxAge: SESSION_MS,
-    secure: process.env.NODE_ENV === "production"
-  });
+  await createSession(req, res, user.id, remember === true);
   res.json({ username: user.username, balanceCents: safeCents(user.balance_cents) });
 }));
 
@@ -186,15 +180,23 @@ async function authenticate(req, res, next) {
 
   try {
     const tokenHash = sha(match[1]);
+    const now = Date.now();
     const { rows } = await database.query(
-      `SELECT u.id, u.username, u.balance_cents FROM sessions s
+      `SELECT u.id, u.username, u.balance_cents, u.totp_enabled, s.expires_at, s.persistent FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = $1 AND s.expires_at > $2`,
-      [tokenHash, Date.now()]
+      [tokenHash, now]
     );
     if (!rows[0]) return res.status(401).json({ error: "Session expired" });
     req.user = rows[0];
     req.tokenHash = tokenHash;
+    // Sliding refresh: extend sessions in their last day without extra reads.
+    if (rows[0].expires_at - now < 24 * 3600 * 1000) {
+      const persistent = Number(rows[0].persistent) === 1;
+      const fresh = now + (persistent ? SESSION_LONG_MS : SESSION_SHORT_MS);
+      await database.query("UPDATE sessions SET expires_at = $1 WHERE token_hash = $2", [fresh, tokenHash]);
+      sessionCookie(res, match[1], persistent);
+    }
     next();
   } catch (error) {
     next(error);
@@ -208,8 +210,43 @@ app.post("/api/logout", authenticate, asyncRoute(async (req, res) => {
 }));
 
 app.get("/api/me", authenticate, (req, res) => {
-  res.json({ username: req.user.username, balanceCents: safeCents(req.user.balance_cents) });
+  res.json({
+    username: req.user.username,
+    balanceCents: safeCents(req.user.balance_cents),
+    twoFactorEnabled: Number(req.user.totp_enabled) === 1
+  });
 });
+
+async function listSessions(userId) {
+  const { rows } = await database.query(
+    "SELECT token_hash, created_at, expires_at, ip, user_agent FROM sessions WHERE user_id = $1 AND expires_at > $2 ORDER BY created_at DESC",
+    [userId, Date.now()]
+  );
+  return rows.map((row) => ({
+    tokenHash: row.token_hash,
+    createdAt: Number(row.created_at) || 0,
+    expiresAt: Number(row.expires_at),
+    ip: row.ip || "",
+    agent: row.user_agent || ""
+  }));
+}
+
+app.get("/api/sessions", authenticate, asyncRoute(async (req, res) => {
+  res.json({ current: req.tokenHash, sessions: await listSessions(req.user.id) });
+}));
+
+app.delete("/api/sessions", authenticate, asyncRoute(async (req, res) => {
+  const { tokenHash, allOthers } = req.body || {};
+  if (allOthers === true) {
+    await database.query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2", [req.user.id, req.tokenHash]);
+  } else {
+    if (typeof tokenHash !== "string" || !/^[a-f0-9]{64}$/.test(tokenHash)) {
+      return res.status(400).json({ error: "Choose a valid session." });
+    }
+    await database.query("DELETE FROM sessions WHERE user_id = $1 AND token_hash = $2", [req.user.id, tokenHash]);
+  }
+  res.json({ current: req.tokenHash, sessions: await listSessions(req.user.id) });
+}));
 
 async function haveSuffix(req, wagerCents) {
   try {

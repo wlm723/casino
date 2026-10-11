@@ -460,6 +460,57 @@
       line-height: 1.55;
     }
 
+    .session-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .session-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 7px 11px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, .028);
+      color: #ded7e7;
+      font-size: .85rem;
+    }
+
+    .session-row.current-device {
+      border-color: rgba(240, 201, 107, .4);
+      background: rgba(240, 201, 107, .08);
+    }
+
+    .session-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+
+    .session-meta { color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+
+    .revoke-button {
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: transparent;
+      color: #ffc2b7;
+      cursor: pointer;
+      font-size: .78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .revoke-button:disabled { cursor: wait; opacity: .6; }
+
     .how-steps {
       display: grid;
       gap: 14px;
@@ -623,6 +674,20 @@
     </section>
 
     <div class="lobby-panels">
+      <section class="panel" aria-labelledby="devices-title">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">Staying logged in</p>
+            <h2 id="devices-title">Your devices</h2>
+          </div>
+          <button class="utility-button" id="revoke-others" type="button">Log out others</button>
+        </div>
+        <ul class="session-list" id="session-list" aria-live="polite">
+          <li class="panel-message">Loading devices…</li>
+        </ul>
+        <p class="panel-message" id="sessions-error" role="status" hidden></p>
+      </section>
+
       <section class="panel" id="how-it-works" aria-labelledby="how-title">
         <div class="panel-heading">
           <div>
@@ -787,7 +852,10 @@
       muteToggle: document.querySelector("#mute-toggle"),
       muteIcon: document.querySelector("#mute-icon"),
       muteLabel: document.querySelector("#mute-label"),
-      logoutButton: document.querySelector("#logout-button")
+      logoutButton: document.querySelector("#logout-button"),
+      sessionList: document.querySelector("#session-list"),
+      sessionsError: document.querySelector("#sessions-error"),
+      revokeOthers: document.querySelector("#revoke-others")
     };
 
     // Universal balance: server stores euros as integer balance_cents.
@@ -829,6 +897,125 @@
       elements.status.textContent = message;
       elements.status.hidden = !message;
     }
+
+    function deviceLabel(agent) {
+      const text = String(agent || "");
+      if (/Android/i.test(text)) return "Android device";
+      if (/iPhone|iPad|iPod/i.test(text)) return "Apple device";
+      if (/Windows/i.test(text)) return "Windows device";
+      if (/Macintosh|Mac OS/i.test(text)) return "Mac";
+      if (/Linux/i.test(text)) return "Linux device";
+      if (/Firefox/i.test(text)) return "Firefox browser";
+      if (/Chrome/i.test(text)) return "Chrome browser";
+      if (/Safari/i.test(text)) return "Safari browser";
+      return text ? "Browser session" : "Unknown device";
+    }
+
+    function formatDate(millis) {
+      if (!millis) return "date unknown";
+      try {
+        return new Date(millis).toLocaleString("en-IE", { dateStyle: "medium", timeStyle: "short" });
+      } catch {
+        return "date unknown";
+      }
+    }
+
+    function renderSessions(current, sessions) {
+      elements.sessionList.replaceChildren();
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        const empty = document.createElement("li");
+        empty.className = "panel-message";
+        empty.textContent = "No active devices.";
+        elements.sessionList.append(empty);
+        return;
+      }
+      sessions.forEach((session) => {
+        const row = document.createElement("li");
+        row.className = "session-row";
+        const isCurrent = session.tokenHash === current;
+        if (isCurrent) row.classList.add("current-device");
+
+        const info = document.createElement("div");
+        const name = document.createElement("div");
+        name.className = "session-name";
+        name.textContent = isCurrent ? "This device" : deviceLabel(session.agent);
+        const meta = document.createElement("div");
+        meta.className = "session-meta";
+        meta.textContent = `Since ${formatDate(session.createdAt)}${session.ip ? ` · ${session.ip}` : ""}`;
+        info.append(name, meta);
+
+        row.append(info);
+        if (!isCurrent) {
+          const revoke = document.createElement("button");
+          revoke.className = "revoke-button";
+          revoke.type = "button";
+          revoke.textContent = "Log out";
+          revoke.addEventListener("click", () => void revokeSession(session.tokenHash, revoke));
+          row.append(revoke);
+        } else {
+          const marker = document.createElement("span");
+          marker.className = "session-meta";
+          marker.textContent = "current";
+          row.append(marker);
+        }
+        elements.sessionList.append(row);
+      });
+    }
+
+    async function loadSessions() {
+      elements.sessionsError.hidden = true;
+      try {
+        const data = await api("/api/sessions");
+        renderSessions(data.current, data.sessions);
+      } catch (error) {
+        if (error.status === 401) {
+          window.location.replace("/");
+          return;
+        }
+        elements.sessionList.replaceChildren();
+        elements.sessionsError.textContent = error.message;
+        elements.sessionsError.hidden = false;
+      }
+    }
+
+    async function revokeSession(tokenHash, button) {
+      button.disabled = true;
+      try {
+        const data = await api("/api/sessions", {
+          method: "DELETE",
+          body: JSON.stringify({ tokenHash })
+        });
+        renderSessions(data.current, data.sessions);
+      } catch (error) {
+        if (error.status === 401) {
+          window.location.replace("/");
+          return;
+        }
+        elements.sessionsError.textContent = error.message;
+        elements.sessionsError.hidden = false;
+        button.disabled = false;
+      }
+    }
+
+    elements.revokeOthers.addEventListener("click", async () => {
+      elements.revokeOthers.disabled = true;
+      try {
+        const data = await api("/api/sessions", {
+          method: "DELETE",
+          body: JSON.stringify({ allOthers: true })
+        });
+        renderSessions(data.current, data.sessions);
+      } catch (error) {
+        if (error.status === 401) {
+          window.location.replace("/");
+          return;
+        }
+        elements.sessionsError.textContent = error.message;
+        elements.sessionsError.hidden = false;
+      } finally {
+        elements.revokeOthers.disabled = false;
+      }
+    });
 
     function createIcon(iconName) {
       const svg = document.createElementNS(SVG_NS, "svg");
@@ -1031,6 +1218,7 @@
         elements.welcomeName.textContent = currentUsername;
         renderBalance(user.balanceCents);
         renderGames();
+        await loadSessions();
         elements.topbar.hidden = false;
         elements.content.hidden = false;
         elements.footer.hidden = false;
