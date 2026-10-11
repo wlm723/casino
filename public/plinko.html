@@ -226,6 +226,26 @@
       background: radial-gradient(circle at 35% 30%, #fff6db, #f0c96b 70%);
       box-shadow: 0 0 16px rgba(240, 201, 107, .9);
       transform: translate(-50%, -50%);
+      transition: width .1s ease, height .1s ease;
+    }
+
+    .ball.squash { width: 24px; height: 12px; }
+
+    .ghost {
+      position: absolute;
+      z-index: 1;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: rgba(240, 201, 107, .55);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      animation: ghostfade .45s ease-out forwards;
+    }
+
+    @keyframes ghostfade {
+      from { opacity: .7; transform: translate(-50%, -50%) scale(1); }
+      to { opacity: 0; transform: translate(-50%, -50%) scale(.35); }
     }
 
     .slots {
@@ -254,7 +274,15 @@
     .slot.t1 { background: rgba(240, 201, 107, .16); color: #ffe8a4; }
     .slot.t2 { background: rgba(240, 201, 107, .3); color: #ffe8a4; box-shadow: 0 0 10px rgba(240, 201, 107, .25); }
     .slot.t3 { background: rgba(169, 119, 213, .35); color: #fff; box-shadow: 0 0 12px rgba(169, 119, 213, .45); }
-    .slot.win { outline: 3px solid #83e2a7; outline-offset: 1px; }
+    .slot.win {
+      outline: 3px solid #83e2a7;
+      outline-offset: 1px;
+      animation: slotpulse .45s ease 2;
+    }
+
+    @keyframes slotpulse {
+      50% { transform: scale(1.14); }
+    }
 
     .message {
       min-height: 30px;
@@ -443,6 +471,7 @@
     <main class="game">
       <a class="home-link" href="./lobby.html">← Back to TAX Casino</a>
       <h1>Plinko</h1>
+      <p class="tagline">Drop the ball. Every bounce is 50/50 — edges pay big.</p>
       <div><button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to light theme</button></div>
 
       <section class="scoreboard" aria-label="Account balance and game score">
@@ -806,10 +835,13 @@
           pts.push({ x: 50 + (rights - (step + 1) / 2) * gap, y: 12 + (step + 1) * rowH });
         }
         const hop = Math.min(3.5, rowH / 9);
+        const swerve = gap * 0.22;
         const stepDur = reduced ? 0 : STEP_MS;
         await new Promise((resolve) => {
           const started = performance.now();
           let lastStep = -1;
+          let squashTimer = 0;
+          let frameCount = 0;
           function frame(now) {
             const t = stepDur === 0 ? 1 : Math.min((now - started) / (rows * stepDur), 1);
             const f = Math.min(t * rows, rows - 0.0001);
@@ -820,15 +852,36 @@
               const peg = board.querySelector(`.peg[data-row="${pegOf[i].row}"][data-pos="${pegOf[i].pos}"]`);
               if (peg) peg.classList.add("hit");
               tone(500 + i * 25, 0.06, "square", 0, 0.05);
+              ball.classList.add("squash");
+              window.clearTimeout(squashTimer);
+              squashTimer = window.setTimeout(() => ball.classList.remove("squash"), 110);
             }
             const a = pts[i];
             const b = pts[i + 1];
+            const dir = Math.sign(b.x - a.x) || 1;
             const fall = st * st;
-            const bump = Math.sin(st * Math.PI) * -hop;
-            ball.style.left = `${a.x + (b.x - a.x) * st}%`;
-            ball.style.top = `${a.y + (b.y - a.y) * fall + bump}px`;
+            const stepHop = hop * (0.7 + 0.6 * (((i * 53) % 100) / 100));
+            const bump = Math.sin(st * Math.PI) * -stepHop;
+            const curve = Math.sin(st * Math.PI) * dir * swerve;
+            const x = a.x + (b.x - a.x) * st + curve;
+            const y = a.y + (b.y - a.y) * fall + bump;
+            ball.style.left = `${x}%`;
+            ball.style.top = `${y}px`;
+            frameCount += 1;
+            if (!reduced && frameCount % 3 === 0 && t < 1) {
+              const ghost = document.createElement("div");
+              ghost.className = "ghost";
+              ghost.style.left = `${x}%`;
+              ghost.style.top = `${y}px`;
+              board.append(ghost);
+              window.setTimeout(() => ghost.remove(), 500);
+            }
             if (t < 1) requestAnimationFrame(frame);
-            else resolve();
+            else {
+              window.clearTimeout(squashTimer);
+              ball.classList.remove("squash");
+              resolve();
+            }
           }
           requestAnimationFrame(frame);
         });
