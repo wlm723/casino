@@ -781,6 +781,11 @@
         return;
       }
 
+      // Settle money first: the response is authoritative. The animation
+      // below is best-effort and must never strand a paid drop.
+      balanceCents = result.balanceCents;
+      updateBalanceDisplay();
+
       renderBoard();
       const { gap, rowH } = boardMetrics();
       const ball = document.createElement("div");
@@ -789,22 +794,24 @@
       ball.style.top = "6px";
       board.append(ball);
 
-      let rights = 0;
-      for (let step = 0; step < rows; step += 1) {
-        rights += result.path[step] === 1 ? 1 : 0;
-        await delay(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : STEP_MS);
-        ball.style.left = `${50 + (rights - (step + 1) / 2) * gap}%`;
-        ball.style.top = `${12 + (step + 1) * rowH}px`;
-        const peg = board.querySelector(`.peg[data-row="${step}"][data-pos="${rights - (result.path[step] === 1 ? 1 : 0)}"]`);
-        if (peg) peg.classList.add("hit");
-        tone(500 + step * 25, 0.06, "square", 0, 0.05);
+      try {
+        let rights = 0;
+        for (let step = 0; step < rows; step += 1) {
+          rights += result.path[step] === 1 ? 1 : 0;
+          await delay(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : STEP_MS);
+          ball.style.left = `${50 + (rights - (step + 1) / 2) * gap}%`;
+          ball.style.top = `${12 + (step + 1) * rowH}px`;
+          const peg = board.querySelector(`.peg[data-row="${step}"][data-pos="${rights - (result.path[step] === 1 ? 1 : 0)}"]`);
+          if (peg) peg.classList.add("hit");
+          tone(500 + step * 25, 0.06, "square", 0, 0.05);
+        }
+        await delay(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 120);
+      } catch (error) {
+        console.error("Plinko animation failed:", error);
       }
-      await delay(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 120);
 
       const mult = Number(result.multiplier);
       const payoutCents = Number.isSafeInteger(result.payoutCents) ? result.payoutCents : 0;
-      balanceCents = result.balanceCents;
-      updateBalanceDisplay();
       const bin = slotsBar.querySelector(`.slot[data-slot="${result.slot}"]`);
       if (bin) bin.classList.add("win");
       drops += 1;
