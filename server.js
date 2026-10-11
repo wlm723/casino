@@ -775,6 +775,123 @@ app.post("/api/plinko/drop", authenticate, asyncRoute(async (req, res) => {
   }
 }));
 
+// Aviator (crash): multiplier climbs as mult = e^(RATE * seconds) from 1.00x.
+// The crash point is sealed server-side at round start; cash-outs resolve
+// against server time, never the client's word.
+const AVIATOR_RATE = 0.06;
+const AVIATOR_MAX_CRASH = 500;
+const AVIATOR_HOUSE = 0.99;
+function aviatorCrashPoint() {
+  const roll = crypto.randomInt(2 ** 32) / 2 ** 32;
+  if (roll < 0.03) return 1;
+  return Math.min(AVIATOR_MAX_CRASH, Math.floor((AVIATOR_HOUSE / (1 - roll)) * 100) / 100);
+}
+const aviatorMultAt = (elapsedMs) => Math.exp(AVIATOR_RATE * (elapsedMs / 1000));
+
+app.post("/api/aviator/rounds", authenticate, asyncRoute(async (req, res) => {
+  const { wagerCents } = req.body || {};
+  if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > MAX_WAGER_CENTS) {
+    return res.status(400).json({ error: "Bet must be between €0.10 and €100.00." });
+  }
+
+  const crash = aviatorCrashPoint();
+  const now = Date.now();
+  const id = crypto.randomUUID();
+
+  // Plain sequential debit: one statement, matched rows checked directly.
+  const { rows: debitedRows } = await database.query(
+    `UPDATE users
+     SET balance_cents = balance_cents - $2
+     WHERE id = $1 AND balance_cents >= $2
+     RETURNING balance_cents`,
+    [req.user.id, wagerCents]
+  );
+  if (!debitedRows[0]) {
+    logShortfall(req, wagerCents);
+    return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req, wagerCents)}` });
+  }
+  try {
+    await database.query(
+      `UPDATE aviator_rounds
+       SET status = 'abandoned', updated_at = $2
+       WHERE user_id = $1 AND status = 'active'`,
+      [req.user.id, now]
+    );
+    await database.query(
+      `INSERT INTO aviator_rounds
+       (id, user_id, wager_cents, crash_point, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4::numeric, 'active', $5, $5)`,
+      [id, req.user.id, wagerCents, String(crash), now]
+    );
+  } catch (error) {
+    // Never take money without recording the round: refund the debit.
+    await database.query(
+      "UPDATE users SET balance_cents = balance_cents + $1 WHERE id = $2",
+      [wagerCents, req.user.id]
+    ).catch(() => {});
+    throw error;
+  }
+  res.status(201).json({ roundId: id, startedAt: now, balanceCents: safeCents(debitedRows[0].balance_cents) });
+}));
+
+app.post("/api/aviator/rounds/:roundId/cashout", authenticate, asyncRoute(async (req, res) => {
+  const { roundId } = req.params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(roundId)) {
+    return res.status(400).json({ error: "Invalid round identifier." });
+  }
+
+  const { rows: roundRows } = await database.query(
+    "SELECT wager_cents, crash_point, status, created_at FROM aviator_rounds WHERE id = $1 AND user_id = $2",
+    [roundId, req.user.id]
+  );
+  const round = roundRows[0];
+  if (!round || round.status !== "active") {
+    return res.status(409).json({ error: "This round is already over. Start a new one." });
+  }
+  const liveMult = Math.floor(aviatorMultAt(Date.now() - Number(round.created_at)) * 100) / 100;
+  const crash = Number(round.crash_point);
+  if (liveMult >= crash) {
+    await database.query(
+      "UPDATE aviator_rounds SET status = 'lost', updated_at = $1 WHERE id = $2 AND status = 'active'",
+      [Date.now(), roundId]
+    );
+    const { rows: balRows } = await database.query(
+      "SELECT balance_cents FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    return res.json({ crashed: true, crashPoint: crash, balanceCents: safeCents(balRows[0].balance_cents) });
+  }
+
+  const payoutCents = Math.floor(Number(round.wager_cents) * liveMult);
+  const { rows: changedRows } = await database.query(
+    `UPDATE aviator_rounds
+     SET status = 'cashed_out', cashout_mult = $1::numeric, payout_cents = $2, updated_at = $3
+     WHERE id = $4 AND status = 'active'
+     RETURNING id`,
+    [String(liveMult), payoutCents, Date.now(), roundId]
+  );
+  if (!changedRows[0]) {
+    return res.status(409).json({ error: "That action was already submitted. Please try again." });
+  }
+  const { rows: balRows } = await database.query(
+    "UPDATE users SET balance_cents = balance_cents + $1 WHERE id = $2 RETURNING balance_cents",
+    [payoutCents, req.user.id]
+  );
+  res.json({
+    crashed: false,
+    cashMult: liveMult,
+    payoutCents: safeCents(payoutCents),
+    balanceCents: safeCents(balRows[0].balance_cents)
+  });
+}));
+
+app.get("/api/aviator/recent", authenticate, asyncRoute(async (req, res) => {
+  const { rows } = await database.query(
+    "SELECT crash_point FROM aviator_rounds WHERE status IN ('lost', 'cashed_out') ORDER BY created_at DESC LIMIT 12"
+  );
+  res.json(rows.map((row) => ({ crash: Number(row.crash_point) })));
+}));
+
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
   if (error.type === "entity.parse.failed") {

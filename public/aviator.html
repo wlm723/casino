@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1a0b12">
+  <title>Aviator</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f7ecec;
+      background: #1a0b12;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    button, input, select, a { touch-action: manipulation; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      min-height: 100dvh;
+      margin: 0;
+      padding: 24px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(190, 60, 70, .25), transparent 45%),
+        radial-gradient(ellipse at 95% 40%, rgba(179, 124, 48, .08), transparent 30%),
+        #1a0b12;
+    }
+
+    .layout {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      width: 100%;
+      align-items: center;
+      justify-content: center;
+      gap: 30px;
+      margin: auto 0;
+    }
+
+    .layout > .game { flex: 1 1 0; max-width: 760px; min-width: 0; width: auto; }
+
+    .side-art { display: none; flex: 0 0 auto; flex-direction: column; gap: 30px; }
+
+    .medallion {
+      display: grid;
+      width: 112px;
+      height: 112px;
+      place-items: center;
+      border: 1px solid rgba(255, 120, 130, .4);
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, rgba(120, 40, 50, .9), rgba(30, 12, 18, .9));
+      box-shadow: 0 0 30px rgba(220, 70, 80, .18), inset 0 1px 0 rgba(255, 255, 255, .1);
+      font-size: 3.2rem;
+      animation: floaty 5.5s ease-in-out infinite;
+    }
+
+    .side-art .medallion:nth-child(2) { animation-delay: -1.8s; }
+    .side-art .medallion:nth-child(3) { animation-delay: -3.6s; }
+
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0) rotate(-5deg); }
+      50% { transform: translateY(-14px) rotate(5deg); }
+    }
+
+    @media (min-width: 1250px) {
+      .side-art { display: flex; }
+    }
+
+    .game { width: min(100%, 760px); text-align: center; }
+
+    .home-link {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 0 16px;
+      border: 1px solid #f1d27e;
+      border-radius: 11px;
+      background: linear-gradient(180deg, #e3bd62, #bc8d32);
+      color: #241a08;
+      font-size: .88rem;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    h1 {
+      margin: 0;
+      color: #fff2f2;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      text-shadow: 0 3px 20px rgba(220, 70, 80, .3);
+    }
+
+    .tagline { margin: 8px 0 0; color: #c9a9ae; font-size: .95rem; }
+
+    .crashes {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      min-height: 30px;
+      margin: 12px 0 4px;
+    }
+
+    .crash-chip {
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .06);
+      font-size: .75rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .crash-chip.low { color: #7cc4ff; }
+    .crash-chip.mid { color: #9d7bff; }
+    .crash-chip.high { color: #f0c96b; }
+
+    .scoreboard {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 12px 0 14px;
+    }
+
+    .stat {
+      padding: 12px 8px;
+      border: 1px solid rgba(255, 120, 130, .25);
+      border-radius: 15px;
+      background: linear-gradient(145deg, rgba(60, 22, 30, .9), rgba(35, 14, 20, .94));
+    }
+
+    .stat-value {
+      display: block;
+      color: #ffd9dc;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.4rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-label {
+      display: block;
+      margin-top: 2px;
+      color: #c9a9ae;
+      font-size: .68rem;
+      font-weight: 750;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      overflow: hidden;
+      border: 1px solid rgba(255, 120, 130, .3);
+      border-radius: 22px;
+      background: #12060b;
+      box-shadow: inset 0 0 35px rgba(0, 0, 0, .5), 0 10px 30px rgba(0, 0, 0, .25);
+    }
+
+    .stage canvas { display: block; width: 100%; height: 300px; }
+
+    .mult-overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .mult-number {
+      color: #fff;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2.6rem, 9vw, 4.2rem);
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 4px 26px rgba(220, 50, 60, .55);
+    }
+
+    .mult-number.cashed { color: #83e2a7; text-shadow: 0 4px 26px rgba(60, 200, 120, .55); }
+    .mult-number.crashed { color: #ff6b6b; }
+
+    .message {
+      min-height: 30px;
+      margin: 14px 0 10px;
+      color: #e3cdd1;
+      font-size: 1rem;
+      font-weight: 650;
+    }
+
+    .message.win { color: #83e2a7; }
+    .message.lose { color: #ff9b88; }
+
+    .history {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      min-height: 28px;
+      margin: 0 0 10px;
+    }
+
+    .history-label { color: #c9a9ae; font-size: .78rem; align-self: center; }
+
+    .hist-chip {
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .hist-chip.good { background: rgba(131, 226, 167, .12); color: #83e2a7; }
+    .hist-chip.bad { background: rgba(255, 155, 136, .12); color: #ff9b88; }
+
+    .panel {
+      padding: 14px;
+      border: 1px solid rgba(255, 120, 130, .2);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(55, 22, 30, .98), rgba(32, 13, 19, .98));
+    }
+
+    .panel-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: #e3cdd1;
+      font-size: .88rem;
+      font-weight: 700;
+    }
+
+    .sound-btn {
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid #6b3a42;
+      border-radius: 10px;
+      background: #2a1219;
+      color: #e3cdd1;
+      cursor: pointer;
+      font: inherit;
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    .bet-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .bet-input {
+      width: 110px;
+      min-height: 44px;
+      border: 1px solid #6b3a42;
+      border-radius: 10px;
+      background: #160a0f;
+      color: #fff2f2;
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 800;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chip-btn {
+      min-height: 44px;
+      min-width: 52px;
+      padding: 0 10px;
+      border: 1px solid #6b3a42;
+      border-radius: 10px;
+      background: #2a1219;
+      color: #e3cdd1;
+      cursor: pointer;
+      font: inherit;
+      font-size: .82rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chip-btn:disabled { cursor: default; opacity: .45; }
+    .chip-btn.edge { border-color: rgba(240, 201, 107, .5); color: #ffe8a4; }
+
+    .fly-btn {
+      width: 100%;
+      min-height: 56px;
+      border: 0;
+      border-radius: 12px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: .04em;
+    }
+
+    .fly-btn.bet {
+      background: linear-gradient(180deg, #2cbb75, #188653);
+      box-shadow: 0 5px 0 #0a4b2c;
+      color: #f4ffef;
+    }
+
+    .fly-btn.cash {
+      background: linear-gradient(180deg, #f0d27f, #c99a3c);
+      box-shadow: 0 5px 0 #805b1d;
+      color: #241a08;
+    }
+
+    .fly-btn small { display: block; font-size: .78rem; font-weight: 800; }
+    .fly-btn:disabled { cursor: wait; opacity: .65; }
+
+    @media (max-width: 520px) {
+      body { padding: 14px 8px; }
+      input { font-size: 16px; }
+      .stage canvas { height: 240px; }
+      .stat { padding: 10px 4px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="side-art" aria-hidden="true">
+      <div class="medallion">✈️</div>
+      <div class="medallion">🚀</div>
+      <div class="medallion">☁️</div>
+    </aside>
+    <main class="game">
+      <a class="home-link" href="./lobby.html">← Back to TAX Casino</a>
+      <h1>✈ Aviator</h1>
+      <p class="tagline">Watch it climb. Cash out before it flies away.</p>
+
+      <div class="crashes" id="crashes" aria-live="polite"></div>
+
+      <section class="scoreboard" aria-label="Account balance and game score">
+        <div class="stat"><span class="stat-value" id="balance">€100.00</span><span class="stat-label">Balance</span></div>
+        <div class="stat"><span class="stat-value" id="rounds">0</span><span class="stat-label">Rounds</span></div>
+        <div class="stat"><span class="stat-value" id="best">—</span><span class="stat-label">Best cash</span></div>
+      </section>
+
+      <div class="stage">
+        <canvas id="graph" width="760" height="300" aria-hidden="true"></canvas>
+        <div class="mult-overlay"><span class="mult-number" id="mult">×1.00</span></div>
+      </div>
+      <p class="message" id="message" aria-live="polite">Set your bet and press BET!</p>
+      <div class="history" id="history" aria-live="polite"></div>
+
+      <section class="panel" aria-label="Game controls">
+        <form id="settings">
+          <div class="panel-row">
+            <button class="sound-btn" id="sound-toggle" type="button" aria-pressed="true">Sound: On</button>
+          </div>
+          <div class="bet-row">
+            <button class="chip-btn edge" id="bet-min" type="button" data-lock>MIN</button>
+            <button class="chip-btn" type="button" data-lock data-preset="1">1</button>
+            <button class="chip-btn" type="button" data-lock data-preset="2">2</button>
+            <button class="chip-btn" type="button" data-lock data-preset="5">5</button>
+            <button class="chip-btn" type="button" data-lock data-preset="10">10</button>
+            <input class="bet-input" id="wager" name="wager" type="number" min="0.10" max="100" value="10" step="0.01" required aria-label="Bet amount in euros">
+            <button class="chip-btn edge" id="bet-max" type="button" data-lock>MAX</button>
+          </div>
+        </form>
+        <button class="fly-btn bet" id="action" type="button">BET</button>
+      </section>
+    </main>
+    <aside class="side-art" aria-hidden="true">
+      <div class="medallion">🛩️</div>
+      <div class="medallion">💸</div>
+      <div class="medallion">🏆</div>
+    </aside>
+  </div>
+
+  <script>
+    const DEFAULT_WAGER = 10;
+    const MIN_WAGER_CENTS = 10;
+    const GROWTH = 0.06; // must match AVIATOR_RATE in server.js
+    const settingsForm = document.querySelector("#settings");
+    const wagerInput = document.querySelector("#wager");
+    const graph = document.querySelector("#graph");
+    const multDisplay = document.querySelector("#mult");
+    const message = document.querySelector("#message");
+    const actionButton = document.querySelector("#action");
+    const balanceDisplay = document.querySelector("#balance");
+    const roundsDisplay = document.querySelector("#rounds");
+    const bestDisplay = document.querySelector("#best");
+    const crashesStrip = document.querySelector("#crashes");
+    const historyStrip = document.querySelector("#history");
+    const soundToggle = document.querySelector("#sound-toggle");
+    const lockable = [...settingsForm.querySelectorAll("input"), ...document.querySelectorAll("[data-lock]")];
+
+    let wagerCents = DEFAULT_WAGER * 100;
+    let balanceCents = 0;
+    let flying = false;
+    let roundBusy = false;
+    let roundId = null;
+    let startedAt = 0;
+    let frozenElapsed = 0;
+    let lastTick = 1;
+    let rounds = 0;
+    let bestMult = 0;
+    let history = [];
+    const HISTORY_KEY = "aviator-history-v1";
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+      if (Array.isArray(saved)) history = saved.slice(0, 10);
+    } catch {
+      history = [];
+    }
+
+    const SOUND_KEY = "aviator-sound";
+    let soundOn = true;
+    try {
+      soundOn = localStorage.getItem(SOUND_KEY) !== "off";
+    } catch {
+      soundOn = true;
+    }
+    let audioCtx = null;
+    function tone(freq, dur, type = "sine", when = 0, vol = 0.12) {
+      if (!soundOn) return;
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return;
+        audioCtx = audioCtx || new Ctor();
+        if (audioCtx.state === "suspended") void audioCtx.resume();
+        const t = audioCtx.currentTime + when;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + dur + 0.02);
+      } catch {
+        // Audio unavailable: game stays silent.
+      }
+    }
+    function syncSoundButton() {
+      soundToggle.setAttribute("aria-pressed", String(soundOn));
+      soundToggle.textContent = soundOn ? "Sound: On" : "Sound: Off";
+    }
+    soundToggle.addEventListener("click", () => {
+      soundOn = !soundOn;
+      try {
+        localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
+      } catch { /* session choice still applies */ }
+      syncSoundButton();
+    });
+    syncSoundButton();
+
+    function multAt(elapsedMs) {
+      return Math.exp(GROWTH * (elapsedMs / 1000));
+    }
+
+    async function api(path, body) {
+      if (window.location.protocol === "file:") {
+        throw new Error("Open Aviator through TAX Casino at http://localhost:3000/aviator.html to use your account wallet.");
+      }
+      const response = await fetch(path, {
+        credentials: "same-origin",
+        ...(body === undefined ? {} : {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        })
+      });
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("The server returned an invalid response. Please try again.");
+      }
+      if (!response.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+      }
+      return data;
+    }
+
+    function parseWagerCents(value) {
+      const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+      if (!match) return NaN;
+      const cents = Number(match[1]) * 100 + Number((match[2] || "").padEnd(2, "0"));
+      return Number.isSafeInteger(cents) ? cents : NaN;
+    }
+
+    function formatCurrency(cents) {
+      return new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(cents / 100);
+    }
+
+    function updateBalanceDisplay() {
+      balanceDisplay.textContent = formatCurrency(balanceCents);
+    }
+
+    function updateWagerLimit() {
+      const maxWagerCents = Math.min(balanceCents, 10000);
+      wagerInput.max = (maxWagerCents / 100).toFixed(2);
+      wagerInput.disabled = maxWagerCents < MIN_WAGER_CENTS || flying;
+      if (maxWagerCents < MIN_WAGER_CENTS) {
+        wagerInput.value = 0;
+        return;
+      }
+      const enteredCents = parseWagerCents(wagerInput.value);
+      if (!Number.isSafeInteger(enteredCents) || enteredCents > maxWagerCents) {
+        wagerInput.value = (maxWagerCents / 100).toFixed(2);
+      } else if (enteredCents < MIN_WAGER_CENTS) {
+        wagerInput.value = (Math.min(wagerCents, maxWagerCents) / 100).toFixed(2);
+      }
+    }
+
+    function setControlsDisabled(disabled) {
+      lockable.forEach((control) => { control.disabled = disabled; });
+    }
+
+    function drawGraph(currentMult) {
+      const ctx = graph.getContext("2d");
+      const W = graph.width;
+      const H = graph.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = "rgba(255, 255, 255, .07)";
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 5; i += 1) {
+        ctx.beginPath();
+        ctx.moveTo(0, (H / 5) * i);
+        ctx.lineTo(W, (H / 5) * i);
+        ctx.stroke();
+      }
+      const top = Math.max(2, currentMult * 1.25);
+      const span = 9000; // visible 9s window
+      const elapsed = flying ? Date.now() - startedAt : frozenElapsed;
+      const from = Math.max(0, elapsed - span);
+      ctx.strokeStyle = "#e5484d";
+      ctx.lineWidth = 3;
+      ctx.shadowColor = "rgba(229, 72, 77, .7)";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      const steps = 90;
+      for (let i = 0; i <= steps; i += 1) {
+        const t = from + ((elapsed - from) * i) / steps;
+        const m = multAt(t);
+        const x = 20 + ((t - from) / Math.max(span, elapsed || 1)) * (W - 40);
+        const y = H - 24 - (Math.log(m) / Math.log(top)) * (H - 60);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      // plane at the head
+      const headMult = flying ? multAt(elapsed) : currentMult;
+      const hx = W - 46;
+      const hy = H - 24 - (Math.log(Math.min(headMult, top)) / Math.log(top)) * (H - 60);
+      ctx.font = "30px serif";
+      ctx.fillText("✈️", hx, hy);
+    }
+
+    function setActionBet() {
+      actionButton.className = "fly-btn bet";
+      actionButton.innerHTML = "BET";
+    }
+
+    function setActionCash() {
+      actionButton.className = "fly-btn cash";
+      actionButton.innerHTML = `CASH OUT<small id="cashout-amount">€0.00</small>`;
+    }
+
+    function cashoutAmount() {
+      const m = Math.floor(multAt(Date.now() - startedAt) * 100) / 100;
+      return Math.floor(wagerCents * m);
+    }
+
+    function tick() {
+      if (!flying) return;
+      const elapsed = Date.now() - startedAt;
+      const m = multAt(elapsed);
+      multDisplay.textContent = `×${m.toFixed(2)}`;
+      drawGraph(m);
+      const whole = Math.floor(m);
+      if (whole > lastTick) {
+        lastTick = whole;
+        tone(600 + whole * 40, 0.08, "square", 0, 0.06);
+      }
+      const label = document.querySelector("#cashout-amount");
+      if (label) label.textContent = formatCurrency(Math.floor(wagerCents * (Math.floor(m * 100) / 100)));
+    }
+
+    function renderCrashes(points) {
+      crashesStrip.replaceChildren();
+      if (!points.length) {
+        crashesStrip.textContent = "";
+        return;
+      }
+      points.slice(0, 12).forEach((crash) => {
+        const chip = document.createElement("span");
+        chip.className = `crash-chip ${crash < 2 ? "low" : crash < 10 ? "mid" : "high"}`;
+        chip.textContent = `×${Number(crash).toFixed(2)}`;
+        crashesStrip.append(chip);
+      });
+    }
+
+    async function loadRecent() {
+      try {
+        const points = await api("/api/aviator/recent");
+        renderCrashes(points.map((entry) => entry.crash));
+      } catch {
+        // Feed is decorative; the game works without it.
+      }
+    }
+
+    function renderHistory() {
+      historyStrip.replaceChildren();
+      if (history.length === 0) return;
+      const label = document.createElement("span");
+      label.className = "history-label";
+      label.textContent = "Recent:";
+      historyStrip.append(label);
+      history.slice(0, 8).forEach((entry) => {
+        const chip = document.createElement("span");
+        chip.className = `hist-chip ${entry.won ? "good" : "bad"}`;
+        chip.textContent = entry.won
+          ? `${formatCurrency(entry.bet)} · ×${entry.mult} · +${formatCurrency(entry.payout)}`
+          : `${formatCurrency(entry.bet)} · crashed ×${entry.mult}`;
+        historyStrip.append(chip);
+      });
+    }
+
+    function recordHistory(entry) {
+      history.unshift(entry);
+      history = history.slice(0, 10);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      } catch { /* session-only */ }
+      renderHistory();
+    }
+
+    async function onAction() {
+      if (roundBusy) return;
+      if (!flying) {
+        if (!settingsForm.reportValidity()) return;
+        wagerCents = parseWagerCents(wagerInput.value);
+        if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > balanceCents) {
+          message.textContent = "Enter a bet from €0.10 up to your available account balance.";
+          message.className = "message lose";
+          return;
+        }
+        roundBusy = true;
+        try {
+          const round = await api("/api/aviator/rounds", { wagerCents });
+          roundId = round.roundId;
+          startedAt = round.startedAt;
+          balanceCents = round.balanceCents;
+          updateBalanceDisplay();
+          updateWagerLimit();
+          setControlsDisabled(true);
+          flying = true;
+          lastTick = 1;
+          multDisplay.className = "mult-number";
+          multDisplay.textContent = "×1.00";
+          message.textContent = "Flying! Cash out before it crashes.";
+          message.className = "message";
+          setActionCash();
+        } catch (error) {
+          message.textContent = error.message;
+          message.className = "message lose";
+          if (error.status === 401) window.location.replace("/");
+        } finally {
+          roundBusy = false;
+        }
+        return;
+      }
+
+      // Cash out: freeze the display, let the server rule on timing.
+      roundBusy = true;
+      frozenElapsed = Date.now() - startedAt;
+      drawGraph(multAt(frozenElapsed));
+      try {
+        const result = await api(`/api/aviator/rounds/${roundId}/cashout`, {});
+        balanceCents = result.balanceCents;
+        updateBalanceDisplay();
+        flying = false;
+        rounds += 1;
+        roundsDisplay.textContent = rounds;
+        if (result.crashed) {
+          multDisplay.textContent = `×${Number(result.crashPoint).toFixed(2)}`;
+          multDisplay.className = "mult-number crashed";
+          drawGraph(Number(result.crashPoint));
+          tone(150, 0.45, "sawtooth", 0, 0.2);
+          message.textContent = `Crashed at ×${Number(result.crashPoint).toFixed(2)} — bet lost.`;
+          message.className = "message lose";
+          recordHistory({ bet: wagerCents, mult: Number(result.crashPoint), payout: 0, won: false });
+        } else {
+          multDisplay.textContent = `×${Number(result.cashMult).toFixed(2)}`;
+          multDisplay.className = "mult-number cashed";
+          if (Number(result.cashMult) > bestMult) {
+            bestMult = Number(result.cashMult);
+            bestDisplay.textContent = `×${bestMult.toFixed(2)}`;
+          }
+          tone(880, 0.12, "sine", 0, 0.15);
+          tone(1320, 0.2, "sine", 0.1, 0.15);
+          message.textContent = `Cashed out ×${Number(result.cashMult).toFixed(2)} — +${formatCurrency(result.payoutCents)}.`;
+          message.className = "message win";
+          recordHistory({ bet: wagerCents, mult: Number(result.cashMult), payout: result.payoutCents, won: true });
+        }
+        setActionBet();
+        setControlsDisabled(false);
+        updateWagerLimit();
+        void loadRecent();
+      } catch (error) {
+        flying = false;
+        message.textContent = error.message;
+        message.className = "message lose";
+        setActionBet();
+        setControlsDisabled(false);
+        updateWagerLimit();
+        if (error.status === 401) window.location.replace("/");
+      } finally {
+        roundBusy = false;
+      }
+    }
+
+    document.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        wagerInput.value = Number(button.dataset.preset).toFixed(2);
+      });
+    });
+    document.querySelector("#bet-min").addEventListener("click", () => { wagerInput.value = "0.10"; });
+    document.querySelector("#bet-max").addEventListener("click", () => {
+      wagerInput.value = (Math.min(balanceCents, 10000) / 100).toFixed(2);
+    });
+
+    settingsForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void onAction();
+    });
+    actionButton.addEventListener("click", () => void onAction());
+
+    async function refreshBalance() {
+      try {
+        const account = await api("/api/me");
+        balanceCents = account.balanceCents;
+        updateBalanceDisplay();
+        updateWagerLimit();
+      } catch {
+        // Keep the current display; the next action revalidates server-side.
+      }
+    }
+
+    window.addEventListener("focus", () => {
+      if (!flying && !roundBusy) void refreshBalance();
+    });
+
+    async function initialize() {
+      drawGraph(1);
+      if (window.location.protocol === "file:") {
+        message.textContent = "Open Aviator through TAX Casino at http://localhost:3000/aviator.html to use your account wallet.";
+        message.className = "message lose";
+        return;
+      }
+      try {
+        const account = await api("/api/me");
+        balanceCents = account.balanceCents;
+        updateBalanceDisplay();
+        updateWagerLimit();
+        renderHistory();
+        await loadRecent();
+      } catch (error) {
+        message.textContent = error.message;
+        message.className = "message lose";
+        if (error.status === 401) window.location.replace("/");
+      }
+    }
+
+    // Visual loop driver: runs always, animates only while flying.
+    function loop() {
+      if (flying) tick();
+      requestAnimationFrame(loop);
+    }
+    void initialize();
+    loop();
+  </script>
+</body>
+</html>

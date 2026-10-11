@@ -104,6 +104,19 @@ const SCHEMA_STATEMENTS = [
 );`,
   "CREATE INDEX IF NOT EXISTS plinko_rounds_user_id_idx ON plinko_rounds (user_id, created_at DESC);",
   "ALTER TABLE plinko_rounds ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'luck';",
+  `CREATE TABLE IF NOT EXISTS aviator_rounds (
+  id UUID PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  wager_cents BIGINT NOT NULL CHECK (wager_cents >= 0),
+  crash_point NUMERIC NOT NULL,
+  cashout_mult NUMERIC,
+  payout_cents BIGINT NOT NULL DEFAULT 0 CHECK (payout_cents >= 0),
+  status TEXT NOT NULL CHECK (status IN ('active', 'cashed_out', 'lost', 'abandoned')),
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);`,
+  "CREATE INDEX IF NOT EXISTS aviator_rounds_user_id_idx ON aviator_rounds (user_id, created_at DESC);",
+  "CREATE INDEX IF NOT EXISTS aviator_rounds_recent_idx ON aviator_rounds (created_at DESC);",
   `CREATE TABLE IF NOT EXISTS server_logs (
   id BIGSERIAL PRIMARY KEY,
   level TEXT NOT NULL,
