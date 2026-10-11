@@ -211,8 +211,17 @@ app.get("/api/me", authenticate, (req, res) => {
   res.json({ username: req.user.username, balanceCents: safeCents(req.user.balance_cents) });
 });
 
-function logShortfall(req, wagerCents) {
-  // Fire-and-forget diagnostic for 409s: records what the ledger actually held.
+async function haveSuffix(req) {
+  try {
+    const { rows } = await database.query("SELECT balance_cents FROM users WHERE id = $1", [req.user.id]);
+    if (!rows[0] || rows[0].balance_cents == null) return "";
+    return ` Balance is €${(Number(rows[0].balance_cents) / 100).toFixed(2)}.`;
+  } catch {
+    return "";
+  }
+}
+
+function logShortfall(req, wagerCents) {  // Fire-and-forget diagnostic for 409s: records what the ledger actually held.
   database.query("SELECT balance_cents FROM users WHERE id = $1", [req.user.id]).then(
     ({ rows }) => console.warn(
       `Insufficient balance: user=${req.user.username} bet=${wagerCents} ` +
@@ -273,7 +282,7 @@ app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
   );
   if (!createdRows[0]) {
     logShortfall(req, wagerCents);
-    return res.status(409).json({ error: "Insufficient balance for that bet." });
+    return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req)}` });
   }
   res.status(201).json({
     roundId: createdRows[0].round_id,
@@ -463,7 +472,7 @@ app.post("/api/chicken/rounds", authenticate, asyncRoute(async (req, res) => {
   );
   if (!createdRows[0]) {
     logShortfall(req, wagerCents);
-    return res.status(409).json({ error: "Insufficient balance for that bet." });
+    return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req)}` });
   }
   res.status(201).json({
     roundId: createdRows[0].round_id,
@@ -685,12 +694,16 @@ app.post("/api/plinko/drop", authenticate, asyncRoute(async (req, res) => {
          AND EXISTS (SELECT 1 FROM played)
        RETURNING balance_cents
      )
-     SELECT (SELECT balance_cents FROM credited) AS balance_cents`,
+     SELECT (SELECT balance_cents FROM credited) AS balance_cents,
+       (SELECT balance_cents FROM users WHERE id = $1) AS have_cents`,
     [req.user.id, wagerCents, id, rows, risk, String(multiplier), payoutCents, now, mode]
   );
   if (!updatedRows[0] || updatedRows[0].balance_cents == null) {
     logShortfall(req, wagerCents);
-    return res.status(409).json({ error: "Insufficient balance for that bet." });
+    const have = updatedRows[0] && updatedRows[0].have_cents != null
+      ? ` Balance is €${(Number(updatedRows[0].have_cents) / 100).toFixed(2)}.`
+      : "";
+    return res.status(409).json({ error: `Insufficient balance for that bet.${have}` });
   }
   res.status(201).json({
     slot,
