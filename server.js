@@ -892,6 +892,39 @@ app.get("/api/aviator/recent", authenticate, asyncRoute(async (req, res) => {
   res.json(rows.map((row) => ({ crash: Number(row.crash_point) })));
 }));
 
+app.get("/api/aviator/rounds/:roundId/status", authenticate, asyncRoute(async (req, res) => {
+  const { roundId } = req.params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(roundId)) {
+    return res.status(400).json({ error: "Invalid round identifier." });
+  }
+
+  const { rows: roundRows } = await database.query(
+    "SELECT crash_point, status, created_at FROM aviator_rounds WHERE id = $1 AND user_id = $2",
+    [roundId, req.user.id]
+  );
+  const round = roundRows[0];
+  if (!round) return res.status(404).json({ error: "Round not found." });
+  const { rows: balRows } = await database.query(
+    "SELECT balance_cents FROM users WHERE id = $1",
+    [req.user.id]
+  );
+  const balance = safeCents(balRows[0].balance_cents);
+  if (round.status === "lost") {
+    return res.json({ crashed: true, crashPoint: Number(round.crash_point), balanceCents: balance });
+  }
+  if (round.status !== "active") {
+    return res.json({ crashed: false, status: round.status, balanceCents: balance });
+  }
+  const liveMult = Math.floor(aviatorMultAt(Date.now() - Number(round.created_at)) * 100) / 100;
+  const crash = Number(round.crash_point);
+  if (liveMult < crash) return res.json({ crashed: false });
+  await database.query(
+    "UPDATE aviator_rounds SET status = 'lost', updated_at = $1 WHERE id = $2 AND status = 'active'",
+    [Date.now(), roundId]
+  );
+  res.json({ crashed: true, crashPoint: crash, balanceCents: balance });
+}));
+
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
   if (error.type === "entity.parse.failed") {

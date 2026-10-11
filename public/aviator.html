@@ -200,6 +200,15 @@
 
     .stage canvas { display: block; width: 100%; height: 300px; }
 
+    .stage.shake { animation: shake .45s ease; }
+
+    @keyframes shake {
+      20% { transform: translateX(-8px); }
+      40% { transform: translateX(7px); }
+      60% { transform: translateX(-5px); }
+      80% { transform: translateX(4px); }
+    }
+
     .mult-overlay {
       position: absolute;
       inset: 0;
@@ -439,6 +448,7 @@
     const bestDisplay = document.querySelector("#best");
     const crashesStrip = document.querySelector("#crashes");
     const historyStrip = document.querySelector("#history");
+    const stage = document.querySelector(".stage");
     const soundToggle = document.querySelector("#sound-toggle");
     const lockable = [...settingsForm.querySelectorAll("input"), ...document.querySelectorAll("[data-lock]")];
     const autoCash = document.querySelector("#auto-cash");
@@ -704,6 +714,42 @@
       renderHistory();
     }
 
+    function settleCrash(crashPoint, balance) {
+      if (!flying) return;
+      flying = false;
+      frozenElapsed = Date.now() - startedAt;
+      balanceCents = balance;
+      updateBalanceDisplay();
+      rounds += 1;
+      roundsDisplay.textContent = rounds;
+      multDisplay.textContent = `×${Number(crashPoint).toFixed(2)}`;
+      multDisplay.className = "mult-number crashed";
+      drawGraph(Number(crashPoint));
+      stage.classList.remove("shake");
+      void stage.offsetWidth;
+      stage.classList.add("shake");
+      tone(150, 0.45, "sawtooth", 0, 0.2);
+      message.textContent = `Crashed at ×${Number(crashPoint).toFixed(2)} — bet lost.`;
+      message.className = "message lose";
+      recordHistory({ bet: wagerCents, mult: Number(crashPoint), payout: 0, won: false });
+      setActionBet();
+      setControlsDisabled(false);
+      updateWagerLimit();
+      void loadRecent();
+    }
+
+    async function pollStatus() {
+      if (document.hidden || !flying || roundBusy || !roundId) return;
+      try {
+        const status = await api(`/api/aviator/rounds/${roundId}/status`);
+        if (status.crashed) settleCrash(status.crashPoint, status.balanceCents);
+      } catch {
+        // A failed poll resolves on the next poll or manual cash-out.
+      }
+    }
+
+    window.setInterval(pollStatus, 400);
+
     async function onAction() {
       if (roundBusy) return;
       if (!flying) {
@@ -746,32 +792,26 @@
       drawGraph(multAt(frozenElapsed));
       try {
         const result = await api(`/api/aviator/rounds/${roundId}/cashout`, {});
+        if (result.crashed) {
+          settleCrash(result.crashPoint, result.balanceCents);
+          return;
+        }
         balanceCents = result.balanceCents;
         updateBalanceDisplay();
         flying = false;
         rounds += 1;
         roundsDisplay.textContent = rounds;
-        if (result.crashed) {
-          multDisplay.textContent = `×${Number(result.crashPoint).toFixed(2)}`;
-          multDisplay.className = "mult-number crashed";
-          drawGraph(Number(result.crashPoint));
-          tone(150, 0.45, "sawtooth", 0, 0.2);
-          message.textContent = `Crashed at ×${Number(result.crashPoint).toFixed(2)} — bet lost.`;
-          message.className = "message lose";
-          recordHistory({ bet: wagerCents, mult: Number(result.crashPoint), payout: 0, won: false });
-        } else {
-          multDisplay.textContent = `×${Number(result.cashMult).toFixed(2)}`;
-          multDisplay.className = "mult-number cashed";
-          if (Number(result.cashMult) > bestMult) {
-            bestMult = Number(result.cashMult);
-            bestDisplay.textContent = `×${bestMult.toFixed(2)}`;
-          }
-          tone(880, 0.12, "sine", 0, 0.15);
-          tone(1320, 0.2, "sine", 0.1, 0.15);
-          message.textContent = `Cashed out ×${Number(result.cashMult).toFixed(2)} — +${formatCurrency(result.payoutCents)}.`;
-          message.className = "message win";
-          recordHistory({ bet: wagerCents, mult: Number(result.cashMult), payout: result.payoutCents, won: true });
+        multDisplay.textContent = `×${Number(result.cashMult).toFixed(2)}`;
+        multDisplay.className = "mult-number cashed";
+        if (Number(result.cashMult) > bestMult) {
+          bestMult = Number(result.cashMult);
+          bestDisplay.textContent = `×${bestMult.toFixed(2)}`;
         }
+        tone(880, 0.12, "sine", 0, 0.15);
+        tone(1320, 0.2, "sine", 0.1, 0.15);
+        message.textContent = `Cashed out ×${Number(result.cashMult).toFixed(2)} — +${formatCurrency(result.payoutCents)}.`;
+        message.className = "message win";
+        recordHistory({ bet: wagerCents, mult: Number(result.cashMult), payout: result.payoutCents, won: true });
         setActionBet();
         setControlsDisabled(false);
         updateWagerLimit();
