@@ -103,7 +103,14 @@ const SCHEMA_STATEMENTS = [
   created_at BIGINT NOT NULL
 );`,
   "CREATE INDEX IF NOT EXISTS plinko_rounds_user_id_idx ON plinko_rounds (user_id, created_at DESC);",
-  "ALTER TABLE plinko_rounds ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'luck';"
+  "ALTER TABLE plinko_rounds ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'luck';",
+  `CREATE TABLE IF NOT EXISTS server_logs (
+  id BIGSERIAL PRIMARY KEY,
+  level TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);`,
+  "CREATE INDEX IF NOT EXISTS server_logs_created_idx ON server_logs (created_at DESC);"
 ];
 
 let sql;

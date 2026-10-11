@@ -55,6 +55,7 @@ function showUsage() {
   bonus <user> [euros]       top up to euros (default 100.00), never lowers
   bonus --all [euros]        top up every broke account to euros
   economy                    totals: users, euros in circulation, activity
+  logs [warn|error|all] [n]  recent server logs, kept 7 days (default all 30)
   passwd <user> <newpass>    reset a password (logs them out)
   kick <user>                end all their sessions
   delete <user> --yes        permanently remove an account
@@ -140,8 +141,25 @@ async function run() {
       console.log(`${user.username}: ${formatCents(user.balance_cents)} -> ${formatCents(target)}`);
       return;
     }
-    case "economy": {
-      const now = Date.now();
+    case "logs": {
+      const level = String(username || "all").toLowerCase();
+      const limit = Math.min(Math.max(Number(argument) || 30, 1), 200);
+      const { rows } = level === "all"
+        ? await database.query(
+          "SELECT level, message, created_at FROM server_logs ORDER BY id DESC LIMIT $1",
+          [limit]
+        )
+        : await database.query(
+          "SELECT level, message, created_at FROM server_logs WHERE level = $1 ORDER BY id DESC LIMIT $2",
+          [level, limit]
+        );
+      rows.slice().reverse().forEach((row) => {
+        console.log(`${new Date(Number(row.created_at)).toISOString()} [${row.level}] ${row.message}`);
+      });
+      console.log(`${rows.length} log ${rows.length === 1 ? "entry" : "entries"}`);
+      return;
+    }
+    case "economy": {      const now = Date.now();
       const [users, sessions, pickbox, chicken] = await Promise.all([
         database.query("SELECT COUNT(*)::int AS count, COALESCE(SUM(balance_cents), 0) AS total FROM users"),
         database.query("SELECT COUNT(*)::int AS count FROM sessions WHERE expires_at > $1", [now]),

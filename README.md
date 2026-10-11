@@ -37,6 +37,7 @@ node admin.js set <username> <euros>
 node admin.js bonus <username> [euros]
 node admin.js bonus --all [euros]
 node admin.js economy
+node admin.js logs [warn|error|all] [n]
 node admin.js passwd <username> <new-password>
 node admin.js kick <username>
 node admin.js delete <username> --yes

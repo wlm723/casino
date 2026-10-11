@@ -61,6 +61,9 @@ node admin.js bonus --all [euros]
 Show economy totals (users, euros in circulation, activity):
 node admin.js economy
 
+Show recent server logs, kept 7 days (default: all levels, 30 entries):
+node admin.js logs [warn|error|all] [n]
+
 Change a user's password and log them out everywhere:
 node admin.js passwd <username> <new-password>
 

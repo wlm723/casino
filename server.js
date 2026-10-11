@@ -71,6 +71,19 @@ function maybeCleanup(now) {
   database.query("DELETE FROM sessions WHERE expires_at <= $1", [now]).catch(() => {});
   database.query("DELETE FROM auth_attempts WHERE window_start <= $1", [now - RATE_WINDOW_MS]).catch(() => {});
   database.query("DELETE FROM login_tickets WHERE expires_at <= $1", [now]).catch(() => {});
+  database.query("DELETE FROM server_logs WHERE created_at <= $1", [now - 7 * 24 * 3600 * 1000]).catch(() => {});
+}
+// Persistent server log: mirrors to stdout (Vercel picks it up) and stores in
+// Neon for `node admin.js logs`. Persisted volume throttled to ~1 row/sec.
+let lastLogInsert = 0;
+function logEvent(level, message) {
+  const text = String(message).slice(0, 500);
+  if (level === "error") console.error(text);
+  else console.warn(text);
+  const now = Date.now();
+  if (now - lastLogInsert < 1000) return;
+  lastLogInsert = now;
+  database.query("INSERT INTO server_logs(level, message, created_at) VALUES ($1, $2, $3)", [level, text, now]).catch(() => {});
 }
 function limit(req, res, next) {
   checkLimit(req, res, next).catch(next);
@@ -78,12 +91,12 @@ function limit(req, res, next) {
 async function checkLimit(req, res, next) {
   const now = Date.now();
   if (memoryLimitExceeded(req.ip, now)) {
-    console.warn(`Auth rate-limited (memory): ip=${req.ip} path=${req.path}`);
+    logEvent("warn", `Auth rate-limited (memory): ip=${req.ip} path=${req.path}`);
     return res.status(429).json({ error: "Too many attempts. Try again later." });
   }
   try {
     if (await sharedLimitExceeded(req.ip, now)) {
-      console.warn(`Auth rate-limited (shared): ip=${req.ip} path=${req.path}`);
+      logEvent("warn", `Auth rate-limited (shared): ip=${req.ip} path=${req.path}`);
       return res.status(429).json({ error: "Too many attempts. Try again later." });
     }
   } catch (error) {
@@ -166,7 +179,7 @@ app.post("/api/login", limit, asyncRoute(async (req, res) => {
     ok = false; // malformed stored hash: treat as wrong password, not a crash
   }
   if (!user || !ok) {
-    console.warn(`Auth failed: login username="${username}" ip=${req.ip}`);
+    logEvent("warn", `Auth failed: login username="${username}" ip=${req.ip}`);
     return res.status(401).json({ error: "Wrong username or password" });
   }
 
@@ -260,7 +273,8 @@ async function haveSuffix(req, wagerCents) {
 
 function logShortfall(req, wagerCents) {  // Fire-and-forget diagnostic for 409s: records what the ledger actually held.
   database.query("SELECT balance_cents FROM users WHERE id = $1", [req.user.id]).then(
-    ({ rows }) => console.warn(
+    ({ rows }) => logEvent(
+      "warn",
       `Insufficient balance: user=${req.user.username} bet=${wagerCents} ` +
       `have=${rows[0] ? rows[0].balance_cents : "unknown"} ip=${req.ip}`
     ),
@@ -767,7 +781,7 @@ app.use((error, req, res, next) => {
     return res.status(400).json({ error: "Invalid JSON request body" });
   }
 
-  console.error("Request failed:", error);
+  logEvent("error", `Request ${req.method} ${req.path} failed: ${error && error.message ? error.message : error}`);
   if (error.code === "DATABASE_NOT_CONFIGURED") {
     return res.status(503).json({ error: "Database is not configured on this deployment." });
   }
