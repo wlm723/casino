@@ -126,45 +126,6 @@
     .crash-chip.mid { color: #9d7bff; }
     .crash-chip.high { color: #f0c96b; }
 
-    .live-panel {
-      margin: 0 0 12px;
-      padding: 10px 12px;
-      border: 1px solid rgba(255, 120, 130, .2);
-      border-radius: 14px;
-      background: rgba(0, 0, 0, .25);
-      text-align: left;
-    }
-
-    .live-head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-      color: #ffd9dc;
-      font-size: .78rem;
-      font-weight: 800;
-      letter-spacing: .08em;
-    }
-
-    .live-dot { color: #ff6b6b; animation: blink 1.4s ease infinite; }
-
-    @keyframes blink { 50% { opacity: .35; } }
-
-    .live-bets { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-
-    .live-bets li {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: .78rem;
-      color: #e3cdd1;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .live-bets .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
-    .live-bets .amt-won { color: #83e2a7; font-weight: 800; }
-    .live-bets .amt-lost { color: #ff9b88; }
-
     .auto-row {
       display: flex;
       align-items: center;
@@ -421,11 +382,6 @@
 
       <div class="crashes" id="crashes" aria-live="polite"></div>
 
-      <section class="live-panel" aria-label="Live bets">
-        <div class="live-head"><span class="live-dot">●</span> LIVE · <span id="flying-count">0</span> flying</div>
-        <ul class="live-bets" id="live-bets"></ul>
-      </section>
-
       <section class="scoreboard" aria-label="Account balance and game score">
         <div class="stat"><span class="stat-value" id="balance">€100.00</span><span class="stat-label">Balance</span></div>
         <div class="stat"><span class="stat-value" id="rounds">0</span><span class="stat-label">Rounds</span></div>
@@ -487,8 +443,6 @@
     const lockable = [...settingsForm.querySelectorAll("input"), ...document.querySelectorAll("[data-lock]")];
     const autoCash = document.querySelector("#auto-cash");
     const autoTarget = document.querySelector("#auto-target");
-    const flyingCount = document.querySelector("#flying-count");
-    const liveBets = document.querySelector("#live-bets");
 
     let wagerCents = DEFAULT_WAGER * 100;
     let balanceCents = 0;
@@ -649,9 +603,9 @@
       }
       ctx.stroke();
       ctx.shadowBlur = 0;
-      // plane at the head, tilted along its climb
+      // plane rides the line head, tilted along its climb
       const headMult = flying ? multAt(elapsed) : currentMult;
-      const hx = W - 46;
+      const hx = 20 + ((elapsed - from) / Math.max(span, elapsed || 1)) * (W - 40);
       const hy = H - 24 - (Math.log(Math.min(headMult, top)) / Math.log(top)) * (H - 60);
       const px = 20 + ((Math.max(0, elapsed - 400) - from) / Math.max(span, elapsed || 1)) * (W - 40);
       const py = H - 24 - (Math.log(Math.min(multAt(Math.max(0, elapsed - 400)), top)) / Math.log(top)) * (H - 60);
@@ -714,44 +668,6 @@
         crashesStrip.append(chip);
       });
     }
-
-    function renderLive(data) {
-      flyingCount.textContent = data.flying;
-      liveBets.replaceChildren();
-      if (!data.bets.length) {
-        const empty = document.createElement("li");
-        empty.textContent = "No recent bets — be the first!";
-        liveBets.append(empty);
-        return;
-      }
-      data.bets.forEach((bet) => {
-        const row = document.createElement("li");
-        const who = document.createElement("span");
-        who.className = "who";
-        who.textContent = String(bet.username);
-        const amt = document.createElement("span");
-        if (bet.won && bet.cashMult != null) {
-          amt.className = "amt-won";
-          amt.textContent = `${formatCurrency(bet.wagerCents)} · ×${Number(bet.cashMult).toFixed(2)} · +${formatCurrency(bet.payoutCents)}`;
-        } else {
-          amt.className = "amt-lost";
-          amt.textContent = `${formatCurrency(bet.wagerCents)} · crashed`;
-        }
-        row.append(who, amt);
-        liveBets.append(row);
-      });
-    }
-
-    async function loadLive() {
-      if (document.hidden) return;
-      try {
-        renderLive(await api("/api/aviator/live"));
-      } catch {
-        // Feed is decorative; the game works without it.
-      }
-    }
-
-    window.setInterval(loadLive, 3000);
 
     async function loadRecent() {
       try {
@@ -918,7 +834,6 @@
         updateWagerLimit();
         renderHistory();
         await loadRecent();
-        await loadLive();
       } catch (error) {
         message.textContent = error.message;
         message.className = "message lose";
