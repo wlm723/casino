@@ -43,13 +43,13 @@ node admin.js list
 Show a user's balance and active sessions:
 node admin.js show <username>
 
-Add chips to a user:
+Add euros to a user (e.g. 10 or 10.50):
 node admin.js give <username> <amount>
 
-Remove chips from a user (the balance cannot go below zero):
+Remove euros from a user (the balance cannot go below zero):
 node admin.js give <username> -<amount>
 
-Set a user's exact balance:
+Set a user's exact balance in euros (e.g. 100.00):
 node admin.js set <username> <balance>
 
 Change a user's password and log them out everywhere:

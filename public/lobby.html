@@ -581,10 +581,9 @@
         <span class="brand-name">TAX Casino</span>
       </a>
       <div class="top-actions">
-        <div class="balance-pill" aria-label="Virtual chip balance">
+        <div class="balance-pill" aria-label="Account balance">
           <span class="balance-coin" aria-hidden="true">◆</span>
-          <span class="balance-value" id="balance-value">0</span>
-          <span>virtual chips</span>
+          <span class="balance-value" id="balance-value">€0.00</span>
         </div>
         <span class="username" id="username"></span>
         <button class="utility-button" id="mute-toggle" type="button" aria-pressed="true">
@@ -750,7 +749,10 @@
       logoutButton: document.querySelector("#logout-button")
     };
 
-    const numberFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+    // Universal balance: server stores euros as integer balance_cents.
+    // The API returns balanceCents; display it as EUR like boxes.html.
+    const euroFormat = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
+    const formatBalance = (cents) => euroFormat.format(cents / 100);
     const MUTE_STORAGE_KEY = "lucky-chips-muted";
     let currentUsername = "";
     let currentBalance = 0;
@@ -862,9 +864,15 @@
     }
 
     function renderBalance(value) {
-      const target = Number(value);
-      if (!Number.isFinite(target) || target < 0) {
-        throw new Error("The server returned an invalid chip balance.");
+      let target = value;
+      if (typeof target === "string") {
+        if (!/^-?\d+$/.test(target.trim())) {
+          throw new Error("The server returned an invalid euro balance.");
+        }
+        target = Number(target.trim());
+      }
+      if (!Number.isSafeInteger(target) || target < 0) {
+        throw new Error("The server returned an invalid euro balance.");
       }
 
       cancelAnimationFrame(balanceFrame);
@@ -872,7 +880,7 @@
       currentBalance = target;
 
       if (start === target || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        elements.balance.textContent = numberFormat.format(target);
+        elements.balance.textContent = formatBalance(target);
         return;
       }
 
@@ -883,12 +891,12 @@
         const progress = Math.min((timestamp - animationStart) / duration, 1);
         const easedProgress = 1 - Math.pow(1 - progress, 3);
         const displayValue = Math.round(start + (target - start) * easedProgress);
-        elements.balance.textContent = numberFormat.format(displayValue);
+        elements.balance.textContent = formatBalance(displayValue);
 
         if (progress < 1) {
           balanceFrame = requestAnimationFrame(animate);
         } else {
-          elements.balance.textContent = numberFormat.format(target);
+          elements.balance.textContent = formatBalance(target);
           elements.balance.classList.remove("pulse");
           void elements.balance.offsetWidth;
           elements.balance.classList.add("pulse");
@@ -922,7 +930,7 @@
           elements.username.textContent = currentUsername;
           elements.welcomeName.textContent = currentUsername;
         }
-        renderBalance(user.chips);
+        renderBalance(user.balanceCents);
       } catch (error) {
         if (error.status === 401) {
           window.location.replace("/");
@@ -980,7 +988,7 @@
         currentUsername = String(user.username);
         elements.username.textContent = currentUsername;
         elements.welcomeName.textContent = currentUsername;
-        renderBalance(user.chips);
+        renderBalance(user.balanceCents);
         renderGames();
         elements.topbar.hidden = false;
         elements.content.hidden = false;

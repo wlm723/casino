@@ -31,9 +31,12 @@ Run admin commands from a shell with `DATABASE_URL` set:
 ```text
 node admin.js list
 node admin.js show <username>
-node admin.js give <username> <amount>
-node admin.js set <username> <balance>
+node admin.js give <username> <euros>
+node admin.js set <username> <euros>
 node admin.js passwd <username> <new-password>
 node admin.js kick <username>
 node admin.js delete <username> --yes
 ```
+
+Amounts are euros (up to 2 decimals) stored as `balance_cents`.
+The API returns the universal balance as `balanceCents`.

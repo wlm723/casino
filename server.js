@@ -32,7 +32,13 @@ function limit(req, res, next) {
 const validUser = (u) => typeof u === "string" && /^[A-Za-z0-9_]{3,20}$/.test(u);
 const validPass = (p) => typeof p === "string" && p.length >= 8 && p.length <= 72;
 const safeCents = (value) => {
-  const cents = Number(value);
+  let cents = value;
+  if (typeof cents === "string") {
+    if (!/^-?\d+$/.test(cents.trim())) {
+      throw new Error("The account has an invalid euro balance.");
+    }
+    cents = Number(cents.trim());
+  }
   if (!Number.isSafeInteger(cents) || cents < 0) {
     throw new Error("The account has an invalid euro balance.");
   }
