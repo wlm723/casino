@@ -1,0 +1,71 @@
+LUCKY CHIPS - TERMUX AND ADMIN COMMANDS
+========================================
+
+UPDATE THE TERMUX PROJECT AND INSTALL DEPENDENCIES
+-------------------------------------------------
+cd ~/fake_casino
+git pull origin main
+npm install
+
+
+SET THE NEON DATABASE CONNECTION FOR THIS TERMINAL SESSION
+-----------------------------------------------------------
+Enter the actual Neon connection string when prompted. Do not share it.
+
+read -rsp "Neon DATABASE_URL: " DATABASE_URL
+echo
+export DATABASE_URL
+
+The setting lasts only for this terminal session. Repeat these commands in a
+new session before using the admin tool or starting the app.
+
+
+START THE APP LOCALLY
+---------------------
+cd ~/fake_casino
+npm start
+
+Open http://localhost:3000 in the browser on the same device.
+Keep the Termux session running while using the app. Press Ctrl+C to stop it.
+
+
+ADMIN COMMANDS
+--------------
+Run these from ~/fake_casino after setting DATABASE_URL.
+Admin commands use the Neon database.
+
+Show help:
+node admin.js help
+
+List all users and balances:
+node admin.js list
+
+Show a user's balance and active sessions:
+node admin.js show <username>
+
+Add chips to a user:
+node admin.js give <username> <amount>
+
+Remove chips from a user (the balance cannot go below zero):
+node admin.js give <username> -<amount>
+
+Set a user's exact balance:
+node admin.js set <username> <balance>
+
+Change a user's password and log them out everywhere:
+node admin.js passwd <username> <new-password>
+
+Log a user out of all sessions:
+node admin.js kick <username>
+
+Permanently delete a user (requires explicit confirmation):
+node admin.js delete <username> --yes
+
+
+NOTES
+-----
+- Replace <username>, <amount>, <balance>, and <new-password> with real values.
+- Passwords passed to the passwd command may be saved in shell history. Use it
+  only in a private terminal and clear that history if needed.
+- The old local SQLite accounts were not automatically copied to Neon.
+- Keep DATABASE_URL private. It contains database credentials.

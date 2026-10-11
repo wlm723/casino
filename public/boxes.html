@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100b1c">
+  <title>Pick a Box</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f5f0e8;
+      background: #100b1c;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      padding: 36px 18px;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(111, 71, 161, .27), transparent 42%),
+        radial-gradient(ellipse at 95% 40%, rgba(179, 124, 48, .08), transparent 30%),
+        #100b1c;
+    }
+
+    .game {
+      width: min(100%, 660px);
+      padding: clamp(22px, 5vw, 42px);
+      border: 1px solid rgba(227, 190, 255, .16);
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(36, 28, 52, .98), rgba(25, 19, 38, .98));
+      box-shadow: 0 0 0 5px rgba(169, 119, 213, .08), 0 28px 80px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255, 255, 255, .06);
+      text-align: center;
+    }
+
+    [data-theme="light"] {
+      color-scheme: light;
+      color: #30243a;
+      background: #f4eff8;
+    }
+
+    [data-theme="light"] body {
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 42%),
+        radial-gradient(ellipse at 95% 40%, rgba(179, 124, 48, .1), transparent 30%),
+        #f4eff8;
+    }
+
+    [data-theme="light"] .game {
+      border-color: #ddd0e8;
+      background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(246, 240, 251, .98));
+      box-shadow: 0 0 0 5px rgba(169, 119, 213, .08), 0 28px 80px rgba(56, 34, 74, .16), inset 0 1px 0 #fff;
+    }
+
+    [data-theme="light"] h1 { color: #382544; }
+    [data-theme="light"] .setting { color: #51445b; }
+    [data-theme="light"] .setting select,
+    [data-theme="light"] .setting input {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #30243a;
+    }
+    [data-theme="light"] .stat {
+      border-color: #e2d3af;
+      background: linear-gradient(145deg, #fffdf7, #f8f0dc);
+    }
+    [data-theme="light"] .stat-value { color: #805b1d; }
+    [data-theme="light"] .stat-label { color: #71667a; }
+    [data-theme="light"] .board {
+      border-color: #cbb5dc;
+      background: radial-gradient(ellipse at 50% 42%, rgba(169, 119, 213, .2), transparent 72%), #eee6f5;
+      box-shadow: inset 0 0 35px rgba(67, 42, 83, .08), 0 10px 30px rgba(56, 34, 74, .1);
+    }
+    [data-theme="light"] .message { color: #51445b; }
+    [data-theme="light"] .mode-rules {
+      border-color: #d8c9e3;
+      background: #f8f4fb;
+      color: #51445b;
+    }
+    [data-theme="light"] .theme-toggle {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #49345a;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: #f0c96b;
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    .home-link {
+      display: flex;
+      width: fit-content;
+      min-height: 46px;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      padding: 0 18px;
+      border: 1px solid #f1d27e;
+      border-radius: 13px;
+      background: linear-gradient(180deg, #e3bd62, #bc8d32);
+      box-shadow: 0 4px 0 #805b1d, 0 7px 16px rgba(0, 0, 0, .25);
+      color: #241a08;
+      font-size: .96rem;
+      font-weight: 850;
+      text-decoration: none;
+      transition: transform .18s ease, background .18s ease;
+    }
+
+    .home-link:hover {
+      transform: translateY(-2px);
+      background: linear-gradient(180deg, #f0d27f, #c99a3c);
+    }
+
+    .home-link:active { transform: translateY(2px); }
+
+    .home-link:focus-visible {
+      outline: 3px solid #fff;
+      outline-offset: 4px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .home-link { transition: none; }
+    }
+
+    h1 {
+      margin: 0;
+      color: #fff8ed;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2.4rem, 7vw, 3.5rem);
+      letter-spacing: -.035em;
+      line-height: 1.08;
+      text-shadow: 0 3px 20px rgba(240, 201, 107, .18);
+    }
+
+    .scoreboard {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin: 0 0 30px;
+    }
+
+    .settings {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      max-width: 540px;
+      margin: 0 auto 24px;
+      text-align: left;
+    }
+
+    .setting {
+      display: grid;
+      gap: 6px;
+      color: #d8d0e4;
+      font-size: .82rem;
+      font-weight: 700;
+    }
+
+    .setting select,
+    .setting input {
+      width: 100%;
+      min-height: 42px;
+      padding: 0 11px;
+      border: 1px solid #504264;
+      border-radius: 11px;
+      background: #120e1b;
+      color: #f5f0e8;
+      font: inherit;
+    }
+
+    .setting select:focus-visible,
+    .setting input:focus-visible {
+      outline: 3px solid #f0c96b;
+      outline-offset: 2px;
+    }
+
+    .settings .play-again {
+      grid-column: 1 / -1;
+    }
+
+    .mode-rules {
+      grid-column: 1 / -1;
+      margin: 0;
+      padding: 12px 14px;
+      border: 1px solid #504264;
+      border-radius: 11px;
+      background: #191326;
+      color: #d8d0e4;
+      font-size: .88rem;
+      line-height: 1.5;
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      min-height: 42px;
+      align-items: center;
+      justify-content: center;
+      margin: 14px 0 20px;
+      padding: 0 15px;
+      border: 1px solid #665477;
+      border-radius: 12px;
+      background: #21192d;
+      color: #f5f0e8;
+      cursor: pointer;
+      font: inherit;
+      font-size: .9rem;
+      font-weight: 700;
+    }
+
+    .theme-toggle:focus-visible {
+      outline: 3px solid #f0c96b;
+      outline-offset: 2px;
+    }
+
+    .stat {
+      padding: 12px 8px;
+      border: 1px solid rgba(240, 201, 107, .25);
+      border-radius: 15px;
+      background: linear-gradient(145deg, rgba(45, 34, 63, .9), rgba(31, 23, 46, .94));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+    }
+
+    .stat-value {
+      display: block;
+      color: #ffe8a4;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.55rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-label {
+      display: block;
+      margin-top: 2px;
+      color: #aaa2b8;
+      font-size: .7rem;
+      font-weight: 750;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .board {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(8px, 2vw, 13px);
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: clamp(14px, 3vw, 22px);
+      border: 1px solid rgba(217, 169, 255, .32);
+      border-radius: 22px;
+      background: radial-gradient(ellipse at 50% 42%, rgba(111, 71, 161, .38), transparent 72%), repeating-linear-gradient(135deg, rgba(255, 255, 255, .012) 0 2px, transparent 2px 5px), #191326;
+      box-shadow: inset 0 0 35px rgba(0, 0, 0, .36), 0 10px 30px rgba(0, 0, 0, .2);
+    }
+
+    .board-row {
+      display: grid;
+      grid-template-columns: repeat(var(--row-box-count), minmax(0, 1fr));
+      gap: clamp(8px, 2vw, 13px);
+      width: calc(var(--row-box-count) / var(--max-columns) * 100%);
+      margin: 0 auto;
+    }
+
+    .board-row.inactive { opacity: .55; }
+
+    .box {
+      display: grid;
+      min-width: 0;
+      aspect-ratio: 1 / 1;
+      place-items: center;
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid rgba(217, 169, 255, .58);
+      border-radius: clamp(10px, 2.4vw, 16px);
+      background: linear-gradient(145deg, #70479a, #42275f);
+      box-shadow: 0 4px 0 #2c1a40, 0 7px 14px rgba(0, 0, 0, .25), inset 0 1px 0 rgba(255, 241, 255, .18);
+      color: #ffe8a4;
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease, background .25s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .box:not(:disabled):hover {
+      transform: translateY(-4px);
+      background: linear-gradient(145deg, #8a5bb5, #573479);
+      box-shadow: 0 7px 0 #2c1a40, 0 0 22px rgba(217, 169, 255, .28), inset 0 1px 0 rgba(255, 241, 255, .26);
+    }
+
+    .box:not(:disabled):active { transform: translateY(1px); }
+    .box:focus-visible { outline: 3px solid #ffe8a4; outline-offset: 3px; box-shadow: 0 0 0 5px rgba(240, 201, 107, .2); }
+    .box:disabled { cursor: default; }
+    .box.opening { animation: open-box .35s ease-in-out; }
+
+    @keyframes open-box {
+      50% { transform: rotateY(90deg) scale(.88); }
+    }
+
+    .box-label {
+      display: grid;
+      width: 100%;
+      height: 100%;
+      place-items: center;
+      transition: transform .3s ease;
+      font-size: clamp(1.4rem, 6vw, 2.2rem);
+    }
+
+    .box.revealed {
+      transform: rotateY(180deg);
+      border-color: #d9a9ff;
+      background: linear-gradient(145deg, #f0e8f7, #d6c5e4);
+      box-shadow: 0 4px 0 #847090, inset 0 1px 0 rgba(255, 255, 255, .55);
+      color: #271a35;
+    }
+
+    .box.revealed .box-label { transform: rotateY(180deg); }
+    .box.picked { outline: 3px solid #ffe8a4; outline-offset: 2px; }
+
+    .message {
+      min-height: 32px;
+      margin: 24px 0 16px;
+      color: #d8d0e4;
+      font-size: 1.05rem;
+      font-weight: 650;
+    }
+
+    .message.win { color: #83e2a7; }
+    .message.lose { color: #ff9b88; }
+
+    .play-again {
+      min-height: 48px;
+      padding: 0 25px;
+      border: 1px solid #f1d27e;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #e3bd62, #bc8d32);
+      box-shadow: 0 5px 0 #805b1d, 0 8px 18px rgba(0, 0, 0, .22);
+      color: #241a08;
+      cursor: pointer;
+      font: inherit;
+      font-size: .96rem;
+      font-weight: 750;
+      transition: transform .18s ease, background .18s ease;
+    }
+
+    .play-again:hover { transform: translateY(-2px); background: linear-gradient(180deg, #f0d27f, #c99a3c); }
+    .play-again:active { transform: translateY(2px); }
+    .play-again:focus-visible { outline: 3px solid #ffe8a4; outline-offset: 4px; }
+    .play-again[hidden] { display: none; }
+
+    #cash-out {
+      margin: 0 8px 8px;
+      border-color: #d9a9ff;
+      background: linear-gradient(180deg, #9a69c2, #68418b);
+      box-shadow: 0 5px 0 #42275f, 0 8px 18px rgba(0, 0, 0, .22);
+      color: #fff8ed;
+    }
+
+    #cash-out:hover { background: linear-gradient(180deg, #ad7bd3, #79519d); }
+    #cash-out[hidden] { display: none; }
+
+    @media (max-width: 420px) {
+      body { padding: 18px 12px; }
+      .game { border-radius: 20px; }
+      .scoreboard {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        margin-bottom: 21px;
+      }
+      .stat { padding: 10px 4px; }
+      .stat-label { font-size: .62rem; }
+      .settings { gap: 8px; margin-bottom: 20px; }
+      .board { padding: 10px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+
+  </style>
+</head>
+<body>
+  <main class="game">
+    <a class="home-link" href="./lobby.html">← Back to TAX Casino</a>
+    <h1>Pick a Box</h1>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to light + Luck mode</button>
+    <form class="settings" id="settings">
+      <label class="setting" for="row-count">
+        Rows
+        <select id="row-count" name="rows">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+        </select>
+      </label>
+      <label class="setting" for="wager">
+        Bet amount (€)
+        <input id="wager" name="wager" type="number" min="0.10" max="100" value="10" step="0.01" required>
+      </label>
+      <p class="mode-rules" id="mode-rules" aria-live="polite"></p>
+      <button class="play-again" type="submit">Apply Settings</button>
+    </form>
+    <section class="scoreboard" aria-label="Account balance and game score">
+      <div class="stat"><span class="stat-value" id="balance">€100.00</span><span class="stat-label">Balance</span></div>
+      <div class="stat"><span class="stat-value" id="wins">0</span><span class="stat-label">Wins</span></div>
+      <div class="stat"><span class="stat-value" id="losses">0</span><span class="stat-label">Losses</span></div>
+      <div class="stat"><span class="stat-value" id="rounds">0</span><span class="stat-label">Rounds</span></div>
+    </section>
+
+    <section class="board" id="board" aria-label="Pick a box"></section>
+    <p class="message" id="message" aria-live="polite">Choose a box in the base row to start!</p>
+    <button class="play-again" id="cash-out" type="button" hidden>End Round</button>
+    <button class="play-again" id="play-again" type="button" hidden>Play Again</button>
+  </main>
+
+  <script>
+    const DEFAULT_ROWS = 4;
+    const DEFAULT_WAGER = 10;
+    const MIN_WAGER_CENTS = 10;
+    const settingsForm = document.querySelector("#settings");
+    const rowCountInput = document.querySelector("#row-count");
+    const wagerInput = document.querySelector("#wager");
+    const modeRules = document.querySelector("#mode-rules");
+    const themeToggle = document.querySelector("#theme-toggle");
+    const board = document.querySelector("#board");
+    const message = document.querySelector("#message");
+    const cashOutButton = document.querySelector("#cash-out");
+    const playAgainButton = document.querySelector("#play-again");
+    const balanceDisplay = document.querySelector("#balance");
+    const winsDisplay = document.querySelector("#wins");
+    const lossesDisplay = document.querySelector("#losses");
+    const roundsDisplay = document.querySelector("#rounds");
+    const settingsControls = settingsForm.querySelectorAll("select, input, button[type='submit']");
+
+    let rows = DEFAULT_ROWS;
+    let wagerCents = DEFAULT_WAGER * 100;
+    let balanceCents = 0;
+    let roundComplete = false;
+    let roundBusy = false;
+    let currentRow = rows - 1;
+    let betPlaced = false;
+    let wins = 0;
+    let losses = 0;
+    let rounds = 0;
+    let gameMode = "fixed";
+    let roundId = null;
+    let settingsDirty = false;
+
+    function updateModeRules() {
+      modeRules.textContent = "Play responsibly and take breaks.";
+    }
+
+    function updateTheme(theme, updateRoundMode = false) {
+      document.documentElement.dataset.theme = theme;
+      const isLight = theme === "light";
+      gameMode = isLight ? "luck" : "fixed";
+      themeToggle.setAttribute("aria-pressed", String(isLight));
+      themeToggle.textContent = isLight
+        ? "Switch to dark "
+        : "Switch to light";
+      themeToggle.title = isLight
+        ? "Switches to the dark theme and Fixed outcomes"
+        : "Switches to the light theme and Luck mode";
+      document.querySelector('meta[name="theme-color"]').content = isLight ? "#f4eff8" : "#100b1c";
+      localStorage.setItem("pickbox-theme", theme);
+      if (updateRoundMode) markSettingsDirty();
+      else updateModeRules();
+    }
+
+    themeToggle.addEventListener("click", () => {
+      if (themeToggle.disabled) return;
+      updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true);
+    });
+
+    updateTheme(localStorage.getItem("pickbox-theme") === "light" ? "light" : "dark");
+
+
+
+    function markSettingsDirty() {
+      settingsDirty = true;
+      updateActiveRow();
+      message.textContent = "Apply settings to start a round with these rules.";
+      message.className = "message";
+      updateModeRules();
+    }
+
+    async function api(path, body) {
+      if (window.location.protocol === "file:") {
+        throw new Error("Open Pick a Box through TAX Casino at http://localhost:3000/boxes.html to use your account wallet.");
+      }
+
+      const response = await fetch(path, {
+        credentials: "same-origin",
+        ...(body === undefined ? {} : {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        })
+      });
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("The server returned an invalid response. Please try again.");
+      }
+      if (!response.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+      }
+      return data;
+    }
+
+    function parseWagerCents(value) {
+      const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+      if (!match) return NaN;
+      const whole = Number(match[1]);
+      const fraction = Number((match[2] || "").padEnd(2, "0"));
+      const cents = whole * 100 + fraction;
+      return Number.isSafeInteger(cents) ? cents : NaN;
+    }
+
+    function formatCurrency(cents) {
+      return new Intl.NumberFormat("en-IE", {
+        style: "currency",
+        currency: "EUR"
+      }).format(cents / 100);
+    }
+
+    function updateBalanceDisplay() {
+      balanceDisplay.textContent = formatCurrency(balanceCents);
+    }
+
+    function updateWagerLimit() {
+      const maxWagerCents = Math.min(balanceCents, 10000);
+      wagerInput.max = (maxWagerCents / 100).toFixed(2);
+      wagerInput.disabled = maxWagerCents < MIN_WAGER_CENTS || (betPlaced && !roundComplete);
+
+      if (maxWagerCents < MIN_WAGER_CENTS) {
+        wagerInput.value = 0;
+        return;
+      }
+
+      const enteredCents = parseWagerCents(wagerInput.value);
+      if (!Number.isSafeInteger(enteredCents) || enteredCents > maxWagerCents) {
+        wagerInput.value = (maxWagerCents / 100).toFixed(2);
+      } else if (enteredCents < MIN_WAGER_CENTS) {
+        wagerInput.value = (Math.min(wagerCents, maxWagerCents) / 100).toFixed(2);
+      }
+    }
+
+    function setSettingsDisabled(disabled) {
+      settingsControls.forEach((control) => {
+        control.disabled = disabled;
+      });
+    }
+
+    function startRound() {
+      roundComplete = false;
+      roundBusy = false;
+      settingsDirty = false;
+      currentRow = rows - 1;
+      betPlaced = false;
+      roundId = null;
+      cashOutButton.disabled = false;
+      rowCountInput.value = rows;
+      wagerInput.value = (wagerCents / 100).toFixed(2);
+      updateModeRules();
+      board.replaceChildren();
+      message.textContent = balanceCents >= wagerCents && wagerCents >= MIN_WAGER_CENTS
+        ? `Choose a box in the base row (row ${rows}) to start.`
+        : "Your account balance is too low for this bet.";
+      message.className = "message";
+      cashOutButton.hidden = true;
+      playAgainButton.hidden = true;
+
+      const pyramid = document.createDocumentFragment();
+      for (let row = 0; row < rows; row += 1) {
+        const boxCount = 2 * (row + 1);
+        const rowElement = document.createElement("div");
+        rowElement.className = "board-row";
+        rowElement.style.setProperty("--row-box-count", boxCount);
+        rowElement.style.setProperty("--max-columns", rows * 2);
+
+        for (let column = 0; column < boxCount; column += 1) {
+          const box = document.createElement("button");
+          box.type = "button";
+          box.className = "box";
+          box.dataset.row = row;
+          box.dataset.column = column;
+          box.setAttribute("aria-label", `Row ${row + 1}, box ${column + 1}`);
+
+          const label = document.createElement("span");
+          label.className = "box-label";
+          label.setAttribute("aria-hidden", "true");
+          box.append(label);
+          rowElement.append(box);
+        }
+
+        pyramid.append(rowElement);
+      }
+      board.append(pyramid);
+
+      roundComplete = false;
+      setSettingsDisabled(false);
+      playAgainButton.hidden = true;
+      updateWagerLimit();
+      updateActiveRow();
+    }
+
+    board.addEventListener("click", (event) => {
+      const box = event.target.closest(".box");
+      if (!box || !board.contains(box) || box.disabled) return;
+      pickBox(box, Number(box.dataset.row));
+    });
+
+    function updateActiveRow(focusActiveRow = false) {
+      themeToggle.disabled = betPlaced && !roundComplete;
+      board.querySelectorAll(".board-row").forEach((rowElement, index) => {
+        const canContinue = betPlaced || (balanceCents >= wagerCents && wagerCents >= MIN_WAGER_CENTS);
+        const isActive = index === currentRow && !roundComplete && !roundBusy && !settingsDirty && canContinue;
+        rowElement.classList.toggle("inactive", !isActive);
+        rowElement.querySelectorAll(".box").forEach((box) => {
+          box.disabled = !isActive;
+        });
+      });
+
+      if (focusActiveRow) {
+        const activeBox = board.querySelector(`.board-row:nth-child(${currentRow + 1}) .box`);
+        if (activeBox) activeBox.focus();
+      }
+    }
+
+    async function pickBox(selectedBox, row) {
+      if (roundComplete || roundBusy || row !== currentRow) return;
+
+      roundBusy = true;
+      updateActiveRow();
+      if (!betPlaced) {
+        try {
+          const round = await api("/api/pickbox/rounds", {
+            mode: gameMode,
+            rows,
+            wagerCents
+          });
+          roundId = round.roundId;
+          balanceCents = round.balanceCents;
+          betPlaced = true;
+          updateBalanceDisplay();
+          updateWagerLimit();
+          setSettingsDisabled(true);
+          themeToggle.disabled = true;
+        } catch (error) {
+          roundBusy = false;
+          message.textContent = error.message;
+          message.className = "message lose";
+          updateActiveRow();
+          return;
+        }
+      }
+
+      selectedBox.classList.add("picked");
+      selectedBox.classList.add("opening");
+
+      window.setTimeout(() => {
+        submitPick(selectedBox, row);
+      }, 350);
+    }
+
+    async function submitPick(selectedBox, row) {
+      try {
+        const result = await api(`/api/pickbox/rounds/${roundId}/pick`, {
+          row,
+          column: Number(selectedBox.dataset.column)
+        });
+        balanceCents = result.balanceCents;
+        revealBox(selectedBox, !result.safe, true);
+        if (!result.safe) {
+          finishRound(result.safeColumns);
+          return;
+        }
+
+        wins += 1;
+        const payoutCents = Math.floor(wagerCents / 2);
+        winsDisplay.textContent = wins;
+        updateBalanceDisplay();
+        currentRow = result.currentRow;
+        if (result.status === "won") {
+          finishRound(result.safeColumns, true);
+          return;
+        }
+
+        roundBusy = false;
+        message.textContent = `Safe pick! ${formatCurrency(payoutCents)} returned (50% of your bet). Choose a box in row ${currentRow + 1}.`;
+        message.className = "message win";
+        cashOutButton.hidden = false;
+        updateActiveRow(true);
+      } catch (error) {
+        roundBusy = false;
+        roundComplete = true;
+        cashOutButton.hidden = true;
+        cashOutButton.disabled = false;
+        setSettingsDisabled(false);
+        playAgainButton.hidden = false;
+        message.textContent = error.message;
+        message.className = "message lose";
+        updateActiveRow();
+      }
+    }
+
+    function revealBox(box, isBomb, isSelected = false) {
+      box.classList.add("revealed");
+      const outcome = document.createElement("span");
+      outcome.setAttribute("aria-hidden", "true");
+      outcome.textContent = isBomb ? "💣" : "💎";
+      box.querySelector(".box-label").append(outcome);
+
+      const outcomeName = isBomb ? "bomb" : "diamond";
+      const selectionResult = isSelected ? (isBomb ? ", you lose" : ", you win") : "";
+      box.setAttribute(
+        "aria-label",
+        `Row ${Number(box.dataset.row) + 1}, box ${Number(box.dataset.column) + 1}: ${outcomeName}${selectionResult}`
+      );
+    }
+
+    function revealRemainingBoxes(safeColumns) {
+      board.querySelectorAll(".box").forEach((box) => {
+        if (!box.classList.contains("revealed")) {
+          if (gameMode === "fixed") {
+            revealBox(box, Math.random() < 0.5);
+          } else {
+            const row = Number(box.dataset.row);
+            const column = Number(box.dataset.column);
+            const safeColumn = safeColumns[row];
+            const isSafe = safeColumn === null
+              || safeColumn === column
+              || (Array.isArray(safeColumn) && safeColumn.includes(column));
+            revealBox(box, !isSafe);
+          }
+        }
+        box.disabled = true;
+      });
+    }
+
+    function completeRound(resultMessage, resultClass, lost = false) {
+      roundComplete = true;
+      roundBusy = false;
+      cashOutButton.hidden = true;
+      rounds += 1;
+      if (lost) losses += 1;
+
+      message.textContent = resultMessage;
+      message.className = `message ${resultClass}`;
+
+      winsDisplay.textContent = wins;
+      lossesDisplay.textContent = losses;
+      roundsDisplay.textContent = rounds;
+      updateBalanceDisplay();
+      wagerCents = Math.min(wagerCents, balanceCents);
+      if (balanceCents >= MIN_WAGER_CENTS && wagerCents < MIN_WAGER_CENTS) {
+        wagerCents = MIN_WAGER_CENTS;
+      }
+      wagerInput.value = balanceCents >= MIN_WAGER_CENTS
+        ? (wagerCents / 100).toFixed(2)
+        : 0;
+      updateWagerLimit();
+      setSettingsDisabled(false);
+      updateActiveRow();
+      playAgainButton.hidden = false;
+      playAgainButton.focus();
+    }
+
+    function finishRound(safeColumns, won = false) {
+      revealRemainingBoxes(safeColumns);
+      completeRound(won ? "You reached the top row! The round is a win." : "Bomb! The round is over. Any earned payout stays in your balance.", won ? "win" : "lose", !won);
+    }
+
+    async function cashOut() {
+      if (roundComplete || roundBusy || !betPlaced) return;
+
+      roundBusy = true;
+      cashOutButton.disabled = true;
+      try {
+        const result = await api(`/api/pickbox/rounds/${roundId}/cashout`, {});
+        balanceCents = result.balanceCents;
+        revealRemainingBoxes(result.safeColumns);
+        completeRound(`Round ended. Your balance is ${formatCurrency(balanceCents)}.`, "win");
+      } catch (error) {
+        roundBusy = false;
+        cashOutButton.disabled = false;
+        message.textContent = error.message;
+        message.className = "message lose";
+      }
+    }
+
+    settingsForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (roundComplete && playAgainButton.hidden) return;
+      if (!settingsForm.reportValidity()) return;
+      rows = Number(rowCountInput.value);
+      wagerCents = parseWagerCents(wagerInput.value);
+      if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > balanceCents) {
+        message.textContent = "Enter a bet from €0.10 up to your available account balance.";
+        message.className = "message lose";
+        return;
+      }
+      startRound();
+    });
+    rowCountInput.addEventListener("change", markSettingsDirty);
+    wagerInput.addEventListener("input", markSettingsDirty);
+    cashOutButton.addEventListener("click", () => void cashOut());
+    playAgainButton.addEventListener("click", () => void startRound());
+    rowCountInput.value = DEFAULT_ROWS;
+    wagerInput.value = DEFAULT_WAGER;
+    updateModeRules();
+
+    async function initialize() {
+      if (window.location.protocol === "file:") {
+        roundComplete = true;
+        message.textContent = "Open Pick a Box through TAX Casino at http://localhost:3000/boxes.html to use your account wallet.";
+        message.className = "message lose";
+        return;
+      }
+
+      try {
+        const account = await api("/api/me");
+        balanceCents = account.balanceCents;
+        updateBalanceDisplay();
+        updateWagerLimit();
+        startRound();
+      } catch (error) {
+        roundComplete = true;
+        message.textContent = error.message;
+        message.className = "message lose";
+        if (error.status === 401) {
+          window.location.replace("/");
+        }
+      }
+    }
+
+    void initialize();
+  </script>
+</body>
+</html>
