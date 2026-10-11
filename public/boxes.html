@@ -81,11 +81,6 @@
       box-shadow: inset 0 0 35px rgba(67, 42, 83, .08), 0 10px 30px rgba(56, 34, 74, .1);
     }
     [data-theme="light"] .message { color: #51445b; }
-    [data-theme="light"] .mode-rules {
-      border-color: #d8c9e3;
-      background: #f8f4fb;
-      color: #51445b;
-    }
     [data-theme="light"] .theme-toggle {
       border-color: #cbbbd8;
       background: #fff;
@@ -190,18 +185,6 @@
 
     .settings .play-again {
       grid-column: 1 / -1;
-    }
-
-    .mode-rules {
-      grid-column: 1 / -1;
-      margin: 0;
-      padding: 12px 14px;
-      border: 1px solid #504264;
-      border-radius: 11px;
-      background: #191326;
-      color: #d8d0e4;
-      font-size: .88rem;
-      line-height: 1.5;
     }
 
     .theme-toggle {
@@ -416,7 +399,6 @@
         Bet amount (€)
         <input id="wager" name="wager" type="number" min="0.10" max="100" value="10" step="0.01" required>
       </label>
-      <p class="mode-rules" id="mode-rules" aria-live="polite"></p>
       <button class="play-again" type="submit">Apply Settings</button>
     </form>
     <section class="scoreboard" aria-label="Account balance and game score">
@@ -436,13 +418,9 @@
     const DEFAULT_ROWS = 4;
     const DEFAULT_WAGER = 10;
     const MIN_WAGER_CENTS = 10;
-    // Must match PICK_MULTIPLIERS in server.js. Server payouts are authoritative;
-    // this copy is only for showing the ladder before a round starts.
-    const STEP_MULTIPLIERS = [0.8, 1.5, 2.5, 5, 10, 20, 40, 100];
     const settingsForm = document.querySelector("#settings");
     const rowCountInput = document.querySelector("#row-count");
     const wagerInput = document.querySelector("#wager");
-    const modeRules = document.querySelector("#mode-rules");
     const themeToggle = document.querySelector("#theme-toggle");
     const board = document.querySelector("#board");
     const message = document.querySelector("#message");
@@ -468,19 +446,6 @@
     let roundId = null;
     let settingsDirty = false;
 
-    function ladderText(rowCount) {
-      return STEP_MULTIPLIERS.slice(0, rowCount)
-        .map((mult, step) => `row ${rowCount - step}: ×${mult}`)
-        .join(" → ");
-    }
-
-    function updateModeRules() {
-      const odds = gameMode === "luck"
-        ? "Luck mode: half the boxes in each row are safe (~50% per pick)."
-        : "Fixed mode: the base row is always safe; rows above it are not.";
-      modeRules.textContent = `${odds} Safe picks pay multipliers on your bet, climbing from the base: ${ladderText(rows)}. Play responsibly and take breaks.`;
-    }
-
     function updateTheme(theme, updateRoundMode = false) {
       document.documentElement.dataset.theme = theme;
       const isLight = theme === "light";
@@ -495,7 +460,6 @@
       document.querySelector('meta[name="theme-color"]').content = isLight ? "#f4eff8" : "#100b1c";
       localStorage.setItem("pickbox-theme", theme);
       if (updateRoundMode) markSettingsDirty();
-      else updateModeRules();
     }
 
     themeToggle.addEventListener("click", () => {
@@ -512,7 +476,6 @@
       updateActiveRow();
       message.textContent = "Apply settings to start a round with these rules.";
       message.className = "message";
-      updateModeRules();
     }
 
     async function api(path, body) {
@@ -594,7 +557,6 @@
       cashOutButton.disabled = false;
       rowCountInput.value = rows;
       wagerInput.value = (wagerCents / 100).toFixed(2);
-      updateModeRules();
       board.replaceChildren();
       message.textContent = balanceCents >= wagerCents && wagerCents >= MIN_WAGER_CENTS
         ? `Choose a box in the base row (row ${rows}) to start.`
@@ -674,12 +636,6 @@
           });
           roundId = round.roundId;
           balanceCents = round.balanceCents;
-          if (Array.isArray(round.multipliers) && round.multipliers.length === rows) {
-            round.multipliers.forEach((mult, step) => {
-              if (typeof mult === "number" && mult > 0) STEP_MULTIPLIERS[step] = mult;
-            });
-            updateModeRules();
-          }
           betPlaced = true;
           updateBalanceDisplay();
           updateWagerLimit();
@@ -850,7 +806,6 @@
     playAgainButton.addEventListener("click", () => void startRound());
     rowCountInput.value = DEFAULT_ROWS;
     wagerInput.value = DEFAULT_WAGER;
-    updateModeRules();
 
     async function initialize() {
       if (window.location.protocol === "file:") {

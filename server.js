@@ -23,6 +23,7 @@ const SESSION_MS = 7 * 24 * 3600 * 1000;
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+app.set("trust proxy", 1); // Vercel terminates TLS at its proxy; req.ip must use X-Forwarded-For
 app.use(express.json({ limit: "10kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -31,13 +32,60 @@ const asyncRoute = (handler) => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
 
-// --- tiny in-memory rate limit for auth endpoints (10 tries / 15 min per IP) ---
+// --- layered rate limit for auth endpoints (10 tries / 15 min per IP) ---
+// Fast path: bounded in-memory window (per-process). Shared layer: auth_attempts
+// table in Neon so limits hold across serverless instances and restarts.
+const RATE_WINDOW_MS = 15 * 60 * 1000;
+const RATE_MAX_TRIES = 10;
+const RATE_MAX_TRACKED_IPS = 5000;
 const hits = new Map();
+function memoryLimitExceeded(ip, now) {
+  const arr = (hits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (arr.length >= RATE_MAX_TRIES) return true;
+  arr.push(now);
+  if (!hits.has(ip) && hits.size >= RATE_MAX_TRACKED_IPS) {
+    hits.delete(hits.keys().next().value); // evict oldest: map stays bounded
+  }
+  hits.set(ip, arr);
+  return false;
+}
+async function sharedLimitExceeded(ip, now) {
+  const { rows } = await database.query(
+    `INSERT INTO auth_attempts(ip, count, window_start)
+     VALUES ($1, 1, $2)
+     ON CONFLICT (ip) DO UPDATE SET
+       count = CASE WHEN auth_attempts.window_start <= $3 THEN 1 ELSE auth_attempts.count + 1 END,
+       window_start = CASE WHEN auth_attempts.window_start <= $3 THEN $2 ELSE auth_attempts.window_start END
+     RETURNING count`,
+    [ip, now, now - RATE_WINDOW_MS]
+  );
+  return rows[0].count > RATE_MAX_TRIES;
+}
+let lastCleanup = 0;
+function maybeCleanup(now) {
+  if (now - lastCleanup < 10 * 60 * 1000) return;
+  lastCleanup = now;
+  // Fire-and-forget: works on long-running servers and opportunistically on serverless.
+  database.query("DELETE FROM sessions WHERE expires_at <= $1", [now]).catch(() => {});
+  database.query("DELETE FROM auth_attempts WHERE window_start <= $1", [now - RATE_WINDOW_MS]).catch(() => {});
+}
 function limit(req, res, next) {
-  const now = Date.now(), key = req.ip;
-  const arr = (hits.get(key) || []).filter((t) => now - t < 15 * 60 * 1000);
-  if (arr.length >= 10) return res.status(429).json({ error: "Too many attempts. Try again later." });
-  arr.push(now); hits.set(key, arr); next();
+  checkLimit(req, res, next).catch(next);
+}
+async function checkLimit(req, res, next) {
+  const now = Date.now();
+  if (memoryLimitExceeded(req.ip, now)) {
+    return res.status(429).json({ error: "Too many attempts. Try again later." });
+  }
+  try {
+    if (await sharedLimitExceeded(req.ip, now)) {
+      return res.status(429).json({ error: "Too many attempts. Try again later." });
+    }
+  } catch (error) {
+    // Shared counter unavailable: fall back to the in-memory layer above.
+  }
+  maybeCleanup(now);
+  next();
 }
 
 const validUser = (u) => typeof u === "string" && /^[A-Za-z0-9_]{3,20}$/.test(u);
@@ -62,6 +110,7 @@ app.post("/api/signup", limit, asyncRoute(async (req, res) => {
   if (!validPass(password)) return res.status(400).json({ error: "Password must be 8-72 characters" });
 
   const token = crypto.randomBytes(32).toString("hex");
+  const passHash = await bcrypt.hash(password, 12);
   try {
     const { rows } = await database.query(
       `WITH new_user AS (
@@ -76,7 +125,7 @@ app.post("/api/signup", limit, asyncRoute(async (req, res) => {
        SELECT username, balance_cents FROM new_user`,
       [
         username,
-        bcrypt.hashSync(password, 12),
+        passHash,
         START_BALANCE_CENTS,
         Date.now(),
         sha(token),
@@ -104,7 +153,12 @@ app.post("/api/login", limit, asyncRoute(async (req, res) => {
     ? await database.query("SELECT id, username, pass_hash, balance_cents FROM users WHERE LOWER(username) = LOWER($1)", [username])
     : { rows: [] };
   const user = result.rows[0];
-  const ok = bcrypt.compareSync(String(password || ""), user ? user.pass_hash : "$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvali");
+  let ok = false;
+  try {
+    ok = await bcrypt.compare(String(password || ""), user ? user.pass_hash : "$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvali");
+  } catch (error) {
+    ok = false; // malformed stored hash: treat as wrong password, not a crash
+  }
   if (!user || !ok) return res.status(401).json({ error: "Wrong username or password" });
 
   const token = crypto.randomBytes(32).toString("hex");

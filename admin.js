@@ -109,7 +109,7 @@ async function run() {
            UPDATE users SET pass_hash = $1 WHERE id = $2
          )
          DELETE FROM sessions WHERE user_id = $2`,
-        [bcrypt.hashSync(argument, 12), user.id]
+        [await bcrypt.hash(argument, 12), user.id]
       );
       console.log(`Password changed for ${user.username}; their sessions were ended.`);
       return;

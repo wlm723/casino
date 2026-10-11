@@ -43,6 +43,11 @@ const SCHEMA_STATEMENTS = [
   expires_at BIGINT NOT NULL
 );`,
   "CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);",
+  `CREATE TABLE IF NOT EXISTS auth_attempts (
+  ip TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  window_start BIGINT NOT NULL DEFAULT 0
+ );`,
   `CREATE TABLE IF NOT EXISTS pickbox_rounds (
   id UUID PRIMARY KEY,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
