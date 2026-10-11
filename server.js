@@ -701,7 +701,7 @@ app.post("/api/plinko/drop", authenticate, asyncRoute(async (req, res) => {
   if (!updatedRows[0] || updatedRows[0].balance_cents == null) {
     logShortfall(req, wagerCents);
     const have = updatedRows[0] && updatedRows[0].have_cents != null
-      ? ` Balance is €${(Number(updatedRows[0].have_cents) / 100).toFixed(2)}.`
+      ? ` Bet was €${(Number(wagerCents) / 100).toFixed(2)}, balance is €${(Number(updatedRows[0].have_cents) / 100).toFixed(2)}.`
       : "";
     return res.status(409).json({ error: `Insufficient balance for that bet.${have}` });
   }
