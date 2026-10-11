@@ -795,17 +795,45 @@
       board.append(ball);
 
       try {
+        // Bounce physics look: ball falls with acceleration and hops as it
+        // clips each peg mid-step. Positions follow the server path exactly.
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const pts = [{ x: 50, y: 6 }];
+        const pegOf = [];
         let rights = 0;
         for (let step = 0; step < rows; step += 1) {
+          pegOf.push({ row: step, pos: rights });
           rights += result.path[step] === 1 ? 1 : 0;
-          await delay(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : STEP_MS);
-          ball.style.left = `${50 + (rights - (step + 1) / 2) * gap}%`;
-          ball.style.top = `${12 + (step + 1) * rowH}px`;
-          const peg = board.querySelector(`.peg[data-row="${step}"][data-pos="${rights - (result.path[step] === 1 ? 1 : 0)}"]`);
-          if (peg) peg.classList.add("hit");
-          tone(500 + step * 25, 0.06, "square", 0, 0.05);
+          pts.push({ x: 50 + (rights - (step + 1) / 2) * gap, y: 12 + (step + 1) * rowH });
         }
-        await delay(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 120);
+        const hop = Math.min(3.5, rowH / 9);
+        const stepDur = reduced ? 0 : STEP_MS;
+        await new Promise((resolve) => {
+          const started = performance.now();
+          let lastStep = -1;
+          function frame(now) {
+            const t = stepDur === 0 ? 1 : Math.min((now - started) / (rows * stepDur), 1);
+            const f = Math.min(t * rows, rows - 0.0001);
+            const i = Math.floor(f);
+            const st = f - i;
+            if (i !== lastStep) {
+              lastStep = i;
+              const peg = board.querySelector(`.peg[data-row="${pegOf[i].row}"][data-pos="${pegOf[i].pos}"]`);
+              if (peg) peg.classList.add("hit");
+              tone(500 + i * 25, 0.06, "square", 0, 0.05);
+            }
+            const a = pts[i];
+            const b = pts[i + 1];
+            const fall = st * st;
+            const bump = Math.sin(st * Math.PI) * -hop;
+            ball.style.left = `${a.x + (b.x - a.x) * st}%`;
+            ball.style.top = `${a.y + (b.y - a.y) * fall + bump}px`;
+            if (t < 1) requestAnimationFrame(frame);
+            else resolve();
+          }
+          requestAnimationFrame(frame);
+        });
+        if (!reduced) await delay(120);
       } catch (error) {
         console.error("Plinko animation failed:", error);
       }
