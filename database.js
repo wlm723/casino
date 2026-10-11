@@ -62,7 +62,36 @@ const SCHEMA_STATEMENTS = [
 );`,
   "ALTER TABLE pickbox_rounds ADD COLUMN IF NOT EXISTS wager_cents BIGINT NOT NULL DEFAULT 0;",
   "UPDATE pickbox_rounds SET status = 'abandoned', updated_at = (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint WHERE status = 'active' AND wager_cents = 0;",
-  "CREATE INDEX IF NOT EXISTS pickbox_rounds_user_id_idx ON pickbox_rounds (user_id, created_at DESC);"
+  "CREATE INDEX IF NOT EXISTS pickbox_rounds_user_id_idx ON pickbox_rounds (user_id, created_at DESC);",
+  `CREATE TABLE IF NOT EXISTS chicken_rounds (
+  id UUID PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL CHECK (mode IN ('fixed', 'luck')),
+  difficulty TEXT NOT NULL DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard', 'hardcore')),
+  lane_count INTEGER NOT NULL CHECK (lane_count BETWEEN 5 AND 10),
+  current_lane INTEGER NOT NULL DEFAULT 0,
+  wager_cents BIGINT NOT NULL DEFAULT 0 CHECK (wager_cents >= 0),
+  status TEXT NOT NULL CHECK (status IN ('active', 'lost', 'won', 'cashed_out', 'abandoned')),
+  lanes JSONB NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);`,
+  "ALTER TABLE chicken_rounds ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'luck';",
+  "ALTER TABLE chicken_rounds ADD COLUMN IF NOT EXISTS difficulty TEXT NOT NULL DEFAULT 'medium';",
+  "CREATE INDEX IF NOT EXISTS chicken_rounds_user_id_idx ON chicken_rounds (user_id, created_at DESC);",
+  `CREATE TABLE IF NOT EXISTS plinko_rounds (
+  id UUID PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  row_count INTEGER NOT NULL CHECK (row_count IN (8, 12, 16)),
+  risk TEXT NOT NULL CHECK (risk IN ('low', 'medium', 'high')),
+  mode TEXT NOT NULL DEFAULT 'luck' CHECK (mode IN ('fixed', 'luck')),
+  wager_cents BIGINT NOT NULL CHECK (wager_cents >= 0),
+  multiplier NUMERIC NOT NULL,
+  payout_cents BIGINT NOT NULL CHECK (payout_cents >= 0),
+  created_at BIGINT NOT NULL
+);`,
+  "CREATE INDEX IF NOT EXISTS plinko_rounds_user_id_idx ON plinko_rounds (user_id, created_at DESC);",
+  "ALTER TABLE plinko_rounds ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'luck';"
 ];
 
 let sql;
@@ -106,4 +135,4 @@ async function query(text, values) {
   return { rows };
 }
 
-module.exports = { query };
+module.exports = { query, migrate: ensureSchema };

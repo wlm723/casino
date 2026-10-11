@@ -52,6 +52,15 @@ node admin.js give <username> -<amount>
 Set a user's exact balance in euros (e.g. 100.00):
 node admin.js set <username> <balance>
 
+Top up a broke account to euros (default 100.00, never lowers):
+node admin.js bonus <username> [euros]
+
+Top up every account below euros (default 100.00):
+node admin.js bonus --all [euros]
+
+Show economy totals (users, euros in circulation, activity):
+node admin.js economy
+
 Change a user's password and log them out everywhere:
 node admin.js passwd <username> <new-password>
 

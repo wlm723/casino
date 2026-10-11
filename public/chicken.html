@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100b1c">
+  <title>Chicken Road</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f5f0e8;
+      background: #100b1c;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px 14px;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(111, 71, 161, .27), transparent 42%),
+        radial-gradient(ellipse at 95% 40%, rgba(179, 124, 48, .08), transparent 30%),
+        #100b1c;
+    }
+
+    [data-theme="light"] { color-scheme: light; color: #30243a; background: #f4eff8; }
+    [data-theme="light"] body {
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 42%),
+        #f4eff8;
+    }
+    [data-theme="light"] .game {
+      border-color: #ddd0e8;
+      background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(246, 240, 251, .98));
+    }
+    [data-theme="light"] h1 { color: #382544; text-shadow: none; }
+    [data-theme="light"] .theme-toggle {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #49345a;
+    }
+
+    .game { width: min(100%, 1040px); text-align: center; }
+
+    .home-link {
+      display: inline-flex;
+      min-height: 40px;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 0 16px;
+      border: 1px solid #f1d27e;
+      border-radius: 11px;
+      background: linear-gradient(180deg, #e3bd62, #bc8d32);
+      color: #241a08;
+      font-size: .88rem;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .layout {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: center;
+      gap: 30px;
+    }
+
+    .side-art {
+      display: none;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    .medallion {
+      display: grid;
+      width: 112px;
+      height: 112px;
+      place-items: center;
+      border: 1px solid rgba(240, 201, 107, .4);
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, rgba(88, 57, 111, .9), rgba(22, 16, 34, .9));
+      box-shadow: 0 0 30px rgba(169, 119, 213, .18), inset 0 1px 0 rgba(255, 255, 255, .1);
+      font-size: 3.2rem;
+      animation: floaty 5.5s ease-in-out infinite;
+    }
+
+    .side-art .medallion:nth-child(2) { animation-delay: -1.8s; }
+    .side-art .medallion:nth-child(3) { animation-delay: -3.6s; }
+
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0) rotate(-5deg); }
+      50% { transform: translateY(-14px) rotate(5deg); }
+    }
+
+    [data-theme="light"] .medallion {
+      border-color: #cbbbd8;
+      background: radial-gradient(circle at 35% 30%, #ffffff, #e9def3);
+      box-shadow: 0 0 30px rgba(169, 119, 213, .2);
+    }
+
+    @media (min-width: 1500px) {
+      .side-art { display: flex; }
+    }
+
+    h1 {
+      margin: 0;
+      color: #fff8ed;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      text-shadow: 0 3px 20px rgba(240, 201, 107, .18);
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      min-height: 36px;
+      align-items: center;
+      margin: 10px 0 14px;
+      padding: 0 14px;
+      border: 1px solid #665477;
+      border-radius: 10px;
+      background: #21192d;
+      color: #f5f0e8;
+      cursor: pointer;
+      font: inherit;
+      font-size: .82rem;
+      font-weight: 700;
+    }
+    .theme-toggle:disabled { cursor: default; opacity: .55; }
+
+    .wins-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      justify-content: center;
+      min-height: 30px;
+      margin-bottom: 10px;
+      color: #aaa2b8;
+      font-size: .82rem;
+    }
+
+    .wins-strip .live-dot { color: #83e2a7; font-weight: 800; }
+    .win-chip {
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(131, 226, 167, .12);
+      color: #83e2a7;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .road-wrap {
+      display: flex;
+      align-items: stretch;
+      overflow: hidden;
+      border-radius: 18px;
+      background: #3f3f45;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .08);
+    }
+
+    .sidewalk {
+      flex: 0 0 56px;
+      background:
+        repeating-linear-gradient(0deg, #6d6d74 0 16px, #5c5c63 16px 32px);
+      border-right: 3px solid #d9d9de;
+    }
+
+    .barrier {
+      flex: 0 0 34px;
+      background: repeating-linear-gradient(45deg, #f5c542 0 14px, #23232a 14px 28px);
+    }
+
+    .road {
+      display: flex;
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+      background: #55555c;
+    }
+
+    .lane {
+      position: relative;
+      display: flex;
+      flex: 1 0 104px;
+      min-width: 104px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 56px 6px;
+      overflow: hidden;
+      border-left: 3px dashed rgba(255, 255, 255, .45);
+    }
+
+    .lane:first-child { border-left: 0; }
+
+    .car-hit {
+      position: absolute;
+      z-index: 0;
+      top: -48px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 3.2rem;
+      line-height: 1;
+      pointer-events: none;
+      animation: drive-down .55s linear 1 forwards;
+    }
+
+    @keyframes drive-down {
+      from { top: -48px; }
+      to { top: 100%; }
+    }
+
+    .lane-bird, .manhole, .lane-mult { position: relative; z-index: 1; }
+
+    .manhole {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #8b8b93, #55555c 70%);
+      border: 5px solid #333338;
+      box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .12), 0 3px 8px rgba(0, 0, 0, .4);
+    }
+
+    .lane.crossed .manhole {
+      border-color: #1f7a4d;
+      box-shadow: inset 0 0 0 3px rgba(131, 226, 167, .5), 0 0 14px rgba(131, 226, 167, .5);
+    }
+
+    .lane.crashed .manhole {
+      border-color: #a33;
+      box-shadow: inset 0 0 0 3px rgba(255, 120, 120, .6), 0 0 16px rgba(255, 80, 80, .6);
+    }
+
+    .lane-mult {
+      padding: 4px 14px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .5);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .lane.here .lane-mult { background: #2f6df6; }
+
+    .lane-bird {
+      min-height: 4rem;
+      font-size: 4rem;
+      line-height: 1.1;
+    }
+
+    .lane.here .lane-bird { animation: hop .5s ease; }
+
+    @keyframes hop {
+      0% { transform: translateY(0); }
+      40% { transform: translateY(-10px); }
+      100% { transform: translateY(0); }
+    }
+
+    .truck {
+      display: grid;
+      flex: 0 0 84px;
+      place-items: center;
+      border-left: 3px solid #d9d9de;
+      background: #3f3f45;
+      font-size: 4rem;
+    }
+
+    .message {
+      min-height: 30px;
+      margin: 14px 0 10px;
+      color: #d8d0e4;
+      font-size: 1rem;
+      font-weight: 650;
+    }
+
+    .message.win { color: #83e2a7; }
+    .message.lose { color: #ff9b88; }
+
+    .panel {
+      padding: 14px;
+      border: 1px solid rgba(227, 190, 255, .16);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(36, 28, 52, .98), rgba(25, 19, 38, .98));
+    }
+
+    .balance-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: #d8d0e4;
+      font-size: .88rem;
+      font-weight: 700;
+    }
+
+    .balance-row .balance-value {
+      color: #ffe8a4;
+      font-size: 1.2rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .lanes-select {
+      min-height: 38px;
+      padding: 0 10px;
+      border: 1px solid #504264;
+      border-radius: 10px;
+      background: #120e1b;
+      color: #f5f0e8;
+      font: inherit;
+      font-size: .85rem;
+      font-weight: 700;
+    }
+
+    .bet-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .bet-input {
+      width: 110px;
+      min-height: 44px;
+      border: 1px solid #504264;
+      border-radius: 10px;
+      background: #120e1b;
+      color: #f5f0e8;
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 800;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chip-btn {
+      min-height: 44px;
+      min-width: 52px;
+      padding: 0 10px;
+      border: 1px solid #504264;
+      border-radius: 10px;
+      background: #21192d;
+      color: #d8d0e4;
+      cursor: pointer;
+      font: inherit;
+      font-size: .82rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chip-btn:disabled { cursor: default; opacity: .45; }
+    .chip-btn.edge { border-color: rgba(240, 201, 107, .5); color: #ffe8a4; }
+
+    .diff-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .diff-btn {
+      min-height: 40px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: #aaa2b8;
+      cursor: pointer;
+      font: inherit;
+      font-size: .85rem;
+      font-weight: 700;
+    }
+
+    .diff-btn[aria-pressed="true"] {
+      background: rgba(240, 201, 107, .12);
+      color: #ffe8a4;
+      box-shadow: inset 0 -3px 0 #f0c96b;
+    }
+
+    .diff-btn:disabled { cursor: default; opacity: .45; }
+
+    .go-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .maxwin-row {
+      margin: 2px 0 12px;
+      color: #aaa2b8;
+      font-size: .85rem;
+    }
+
+    .maxwin-row b { color: #ffe8a4; font-variant-numeric: tabular-nums; }
+
+    .history {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      min-height: 28px;
+      margin: 0 0 10px;
+    }
+
+    .history-label { color: #aaa2b8; font-size: .78rem; align-self: center; }
+
+    .hist-chip {
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .hist-chip.good { background: rgba(131, 226, 167, .12); color: #83e2a7; }
+    .hist-chip.bad { background: rgba(255, 155, 136, .12); color: #ff9b88; }
+
+    .sound-btn {
+      min-height: 38px;
+      padding: 0 12px;
+      border: 1px solid #504264;
+      border-radius: 10px;
+      background: #21192d;
+      color: #d8d0e4;
+      cursor: pointer;
+      font: inherit;
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    .game.flash { animation: winflash .6s ease; }
+
+    @keyframes winflash {
+      0% { box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+      50% { box-shadow: 0 0 70px rgba(131, 226, 167, .65); }
+      100% { box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+    }
+
+    #confetti {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      pointer-events: none;
+    }
+    .cashout-btn, .go-btn {
+      min-height: 56px;
+      border: 0;
+      border-radius: 12px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .cashout-btn {
+      background: linear-gradient(180deg, #f0d27f, #c99a3c);
+      box-shadow: 0 5px 0 #805b1d;
+      color: #241a08;
+    }
+
+    .cashout-btn small { display: block; font-size: .75rem; font-weight: 800; }
+    .cashout-btn[hidden] { display: none; }
+    .cashout-btn:disabled { cursor: wait; opacity: .65; }
+
+    .go-btn {
+      background: linear-gradient(180deg, #2cbb75, #188653);
+      box-shadow: 0 5px 0 #0a4b2c;
+      color: #f4ffef;
+    }
+
+    .go-btn[hidden] { display: none; }
+    .go-btn:disabled { cursor: wait; opacity: .65; }
+
+    .play-again-row { margin-top: 10px; }
+    .play-again-row[hidden] { display: none; }
+
+    .text-btn {
+      min-height: 44px;
+      padding: 0 22px;
+      border: 1px solid #f1d27e;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #e3bd62, #bc8d32);
+      color: #241a08;
+      cursor: pointer;
+      font: inherit;
+      font-size: .9rem;
+      font-weight: 800;
+    }
+
+    @media (max-width: 520px) {
+      body { padding: 14px 8px; }
+      .lane { flex-basis: 84px; min-width: 84px; }
+      .manhole { width: 52px; height: 52px; }
+      .lane-bird { min-height: 2.4rem; font-size: 2.2rem; }
+      .diff-btn { font-size: .75rem; }
+      .truck { flex-basis: 56px; font-size: 2.2rem; }
+      .sidewalk { flex-basis: 34px; }
+      .barrier { flex-basis: 22px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="side-art" aria-hidden="true">
+      <div class="medallion">🐔</div>
+      <div class="medallion">🛣️</div>
+      <div class="medallion">🏆</div>
+    </aside>
+    <main class="game">
+    <a class="home-link" href="./lobby.html">← Back to TAX Casino</a>
+    <h1>🐔 Chicken Road</h1>
+    <div><button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to light theme</button></div>
+
+    <div class="wins-strip" aria-live="polite">
+      <span class="live-dot">● Recent wins</span>
+      <span id="recent-wins">No wins yet — cross and cash out!</span>
+    </div>
+
+    <div class="road-wrap">
+      <div class="sidewalk" aria-hidden="true"></div>
+      <div class="barrier" aria-hidden="true"></div>
+      <div class="road" id="road" role="group" aria-label="Chicken road lanes"></div>
+      <div class="truck" aria-hidden="true">🚚</div>
+    </div>
+
+    <p class="message" id="message" aria-live="polite">Set your bet and press GO!</p>
+    <div class="history" id="history" aria-live="polite"></div>
+
+    <section class="panel" aria-label="Game controls">
+      <form id="settings">
+        <div class="balance-row">
+          <span>Balance <span class="balance-value" id="balance">€100.00</span></span>
+          <span>
+            <button class="sound-btn" id="sound-toggle" type="button" aria-pressed="true">Sound: On</button>
+          </span>
+        </div>
+          <label>Lanes
+            <select class="lanes-select" id="lane-count" name="lanes">
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8" selected>8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+            </select>
+          </label>
+        </div>
+        <div class="bet-row">
+          <button class="chip-btn edge" id="bet-min" type="button" data-lock>MIN</button>
+          <button class="chip-btn" type="button" data-lock data-preset="0.50">0.5</button>
+          <button class="chip-btn" type="button" data-lock data-preset="1">1</button>
+          <button class="chip-btn" type="button" data-lock data-preset="2">2</button>
+          <button class="chip-btn" type="button" data-lock data-preset="10">10</button>
+          <input class="bet-input" id="wager" name="wager" type="number" min="0.10" max="100" value="10" step="0.01" required aria-label="Bet amount in euros">
+          <button class="chip-btn edge" id="bet-max" type="button" data-lock>MAX</button>
+        </div>
+      </form>
+      <div class="diff-row" role="group" aria-label="Difficulty">
+        <button class="diff-btn" type="button" data-lock data-difficulty="easy" aria-pressed="false">Easy</button>
+        <button class="diff-btn" type="button" data-lock data-difficulty="medium" aria-pressed="true">Medium</button>
+        <button class="diff-btn" type="button" data-lock data-difficulty="hard" aria-pressed="false">Hard</button>
+        <button class="diff-btn" type="button" data-lock data-difficulty="hardcore" aria-pressed="false">Hardcore</button>
+      </div>
+      <div class="maxwin-row">Full clear pays <b id="max-win">€0.00</b></div>
+      <div class="go-row">
+        <button class="cashout-btn" id="cash-out" type="button">CASH OUT<small id="cashout-amount">€0.00</small></button>
+        <button class="go-btn" id="cross" type="button">GO</button>
+      </div>
+      <div class="play-again-row" id="play-again-row" hidden>
+        <button class="text-btn" id="play-again" type="button">Play Again</button>
+      </div>
+    </section>
+    </main>
+    <aside class="side-art" aria-hidden="true">
+      <div class="medallion">🚗</div>
+      <div class="medallion">🎲</div>
+      <div class="medallion">💎</div>
+    </aside>
+  </div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+
+  <script>
+    const DEFAULT_LANES = 8;
+    const DEFAULT_WAGER = 10;
+    const MIN_WAGER_CENTS = 10;
+    // Display copy of the server ladders (CHICKEN_DIFFICULTIES in server.js).
+    // Server payouts are authoritative.
+    const LANE_LADDERS = {
+      easy:     [0.95, 1.08, 1.2, 1.35, 1.55, 1.8, 2.1, 2.5, 3.0, 3.6],
+      medium:   [0.9, 1.15, 1.45, 1.85, 2.4, 3.1, 4.0, 5.2, 6.8, 9.0],
+      hard:     [0.8, 1.3, 1.9, 2.8, 4.2, 6.3, 9.5, 14, 21, 32],
+      hardcore: [0.7, 1.5, 2.8, 5, 9, 16, 28, 50, 90, 160]
+    };
+    const settingsForm = document.querySelector("#settings");
+    const laneCountInput = document.querySelector("#lane-count");
+    const wagerInput = document.querySelector("#wager");
+    const themeToggle = document.querySelector("#theme-toggle");
+    const road = document.querySelector("#road");
+    const message = document.querySelector("#message");
+    const crossButton = document.querySelector("#cross");
+    const cashOutButton = document.querySelector("#cash-out");
+    const cashOutAmount = document.querySelector("#cashout-amount");
+    const playAgainRow = document.querySelector("#play-again-row");
+    const playAgainButton = document.querySelector("#play-again");
+    const balanceDisplay = document.querySelector("#balance");
+    const recentWins = document.querySelector("#recent-wins");
+    const soundToggle = document.querySelector("#sound-toggle");
+    const maxWinDisplay = document.querySelector("#max-win");
+    const historyStrip = document.querySelector("#history");
+    const gameShell = document.querySelector(".game");
+    const confettiCanvas = document.querySelector("#confetti");
+    const diffButtons = [...document.querySelectorAll("[data-difficulty]")];
+    const presetButtons = [...document.querySelectorAll("[data-preset]")];
+    const lockable = [...settingsForm.querySelectorAll("select, input"), ...document.querySelectorAll("[data-lock]")];
+
+    let lanes = DEFAULT_LANES;
+    let difficulty = "medium";
+    let wagerCents = DEFAULT_WAGER * 100;
+    let balanceCents = 0;
+    let roundComplete = false;
+    let roundBusy = false;
+    let currentLane = 0;
+    let betPlaced = false;
+    let earnedCents = 0;
+    let wins = [];
+    let roundId = null;
+    let gameMode = "fixed";
+    let history = [];
+    const HISTORY_KEY = "chicken-history-v1";
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+      if (Array.isArray(saved)) history = saved.slice(0, 10);
+    } catch {
+      history = [];
+    }
+
+    // --- sound (WebAudio, no files) ---
+    const SOUND_KEY = "chicken-sound";
+    let soundOn = true;
+    try {
+      soundOn = localStorage.getItem(SOUND_KEY) !== "off";
+    } catch {
+      soundOn = true;
+    }
+    let audioCtx = null;
+    function tone(freq, dur, type = "sine", when = 0, vol = 0.15) {
+      if (!soundOn) return;
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return;
+        audioCtx = audioCtx || new Ctor();
+        if (audioCtx.state === "suspended") void audioCtx.resume();
+        const t = audioCtx.currentTime + when;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + dur + 0.02);
+      } catch {
+        // Audio unavailable: game stays silent.
+      }
+    }
+    const sfx = {
+      cross: (step) => tone(440 + step * 60, 0.12, "square", 0, 0.07),
+      cash: () => { tone(880, 0.12, "sine", 0, 0.15); tone(1320, 0.2, "sine", 0.1, 0.15); },
+      crash: () => tone(150, 0.45, "sawtooth", 0, 0.2),
+      win: () => { [523, 659, 784, 1047].forEach((freq, index) => tone(freq, 0.16, "triangle", index * 0.11, 0.15)); }
+    };
+
+    function syncSoundButton() {
+      soundToggle.setAttribute("aria-pressed", String(soundOn));
+      soundToggle.textContent = soundOn ? "Sound: On" : "Sound: Off";
+    }
+
+    soundToggle.addEventListener("click", () => {
+      soundOn = !soundOn;
+      try {
+        localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
+      } catch {
+        // Preference not saved; session choice still applies.
+      }
+      syncSoundButton();
+    });
+    syncSoundButton();
+
+    // --- win celebration ---
+    function celebrate() {
+      gameShell.classList.remove("flash");
+      void gameShell.offsetWidth;
+      gameShell.classList.add("flash");
+      try {
+        const ctx = confettiCanvas.getContext("2d");
+        confettiCanvas.width = window.innerWidth;
+        confettiCanvas.height = window.innerHeight;
+        const colors = ["#f0c96b", "#83e2a7", "#d9a9ff", "#ff9b88", "#7cc4ff"];
+        const parts = Array.from({ length: 140 }, () => ({
+          x: Math.random() * confettiCanvas.width,
+          y: -20 - Math.random() * confettiCanvas.height * 0.3,
+          w: 6 + Math.random() * 6,
+          h: 8 + Math.random() * 8,
+          c: colors[(Math.random() * colors.length) | 0],
+          vy: 2 + Math.random() * 3,
+          vx: -1.5 + Math.random() * 3,
+          r: Math.random() * Math.PI,
+          vr: -0.1 + Math.random() * 0.2
+        }));
+        const start = performance.now();
+        (function frame(now) {
+          const elapsed = (now - start) / 1000;
+          ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+          parts.forEach((part) => {
+            part.x += part.vx;
+            part.y += part.vy;
+            part.r += part.vr;
+            ctx.save();
+            ctx.translate(part.x, part.y);
+            ctx.rotate(part.r);
+            ctx.fillStyle = part.c;
+            ctx.fillRect(-part.w / 2, -part.h / 2, part.w, part.h);
+            ctx.restore();
+          });
+          if (elapsed < 2.8) requestAnimationFrame(frame);
+          else ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+        })(start);
+      } catch {
+        // Canvas unavailable: flash class still shows.
+      }
+    }
+
+    // --- round history ---
+    function persistHistory() {
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 10)));
+      } catch {
+        // History stays session-only.
+      }
+    }
+
+    function renderHistory() {
+      historyStrip.replaceChildren();
+      if (history.length === 0) return;
+      const label = document.createElement("span");
+      label.className = "history-label";
+      label.textContent = "Recent:";
+      historyStrip.append(label);
+      history.slice(0, 8).forEach((entry) => {
+        const chip = document.createElement("span");
+        const won = entry.result !== "crashed";
+        chip.className = `hist-chip ${won ? "good" : "bad"}`;
+        chip.textContent = won
+          ? `${formatCurrency(entry.bet)} · ${entry.lanes}L · +${formatCurrency(entry.earned)}`
+          : `${formatCurrency(entry.bet)} · ${entry.lanes}L · crashed L${entry.lane + 1}`;
+        historyStrip.append(chip);
+      });
+    }
+
+    function recordHistory(outcome) {
+      history.unshift({
+        bet: wagerCents,
+        lanes,
+        difficulty,
+        earned: earnedCents,
+        result: outcome.result,
+        lane: outcome.lane
+      });
+      history = history.slice(0, 10);
+      persistHistory();
+      renderHistory();
+    }
+
+    function updateMaxWin() {
+      const table = ladder();
+      let wager = parseWagerCents(wagerInput.value);
+      if (!Number.isSafeInteger(wager) || wager < MIN_WAGER_CENTS) wager = wagerCents;
+      const count = Number(laneCountInput.value) || lanes;
+      let total = 0;
+      for (let step = 0; step < Math.min(count, table.length); step += 1) {
+        total += Math.floor(wager * table[step]);
+      }
+      maxWinDisplay.textContent = formatCurrency(total);
+    }
+
+    function ladder() {
+      return LANE_LADDERS[difficulty] || LANE_LADDERS.medium;
+    }
+
+    function updateTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      const isLight = theme === "light";
+      gameMode = isLight ? "luck" : "fixed";
+      themeToggle.setAttribute("aria-pressed", String(isLight));
+      themeToggle.textContent = isLight
+        ? "Switch to dark theme"
+        : "Switch to light theme";
+      themeToggle.title = isLight
+        ? "Switches to the dark theme"
+        : "Switches to the light theme";
+      document.querySelector('meta[name="theme-color"]').content = isLight ? "#f4eff8" : "#100b1c";
+      localStorage.setItem("chicken-theme", theme);
+    }
+
+    themeToggle.addEventListener("click", () => {
+      if (themeToggle.disabled) return;
+      updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+      if (!betPlaced) startRound();
+    });
+
+    updateTheme(localStorage.getItem("chicken-theme") === "light" ? "light" : "dark");
+
+    async function api(path, body) {
+      if (window.location.protocol === "file:") {
+        throw new Error("Open Chicken Road through TAX Casino at http://localhost:3000/chicken.html to use your account wallet.");
+      }
+
+      const response = await fetch(path, {
+        credentials: "same-origin",
+        ...(body === undefined ? {} : {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        })
+      });
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("The server returned an invalid response. Please try again.");
+      }
+      if (!response.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+      }
+      return data;
+    }
+
+    function parseWagerCents(value) {
+      const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+      if (!match) return NaN;
+      const whole = Number(match[1]);
+      const fraction = Number((match[2] || "").padEnd(2, "0"));
+      const cents = whole * 100 + fraction;
+      return Number.isSafeInteger(cents) ? cents : NaN;
+    }
+
+    function formatCurrency(cents) {
+      return new Intl.NumberFormat("en-IE", {
+        style: "currency",
+        currency: "EUR"
+      }).format(cents / 100);
+    }
+
+    function updateBalanceDisplay() {
+      balanceDisplay.textContent = formatCurrency(balanceCents);
+    }
+
+    function updateCashOut() {
+      cashOutAmount.textContent = formatCurrency(earnedCents);
+      cashOutButton.disabled = !(betPlaced && !roundComplete && currentLane > 0);
+    }
+
+    function updateWagerLimit() {
+      const maxWagerCents = Math.min(balanceCents, 10000);
+      wagerInput.max = (maxWagerCents / 100).toFixed(2);
+      wagerInput.disabled = maxWagerCents < MIN_WAGER_CENTS || (betPlaced && !roundComplete);
+
+      if (maxWagerCents < MIN_WAGER_CENTS) {
+        wagerInput.value = 0;
+        return;
+      }
+
+      const enteredCents = parseWagerCents(wagerInput.value);
+      if (!Number.isSafeInteger(enteredCents) || enteredCents > maxWagerCents) {
+        wagerInput.value = (maxWagerCents / 100).toFixed(2);
+      } else if (enteredCents < MIN_WAGER_CENTS) {
+        wagerInput.value = (Math.min(wagerCents, maxWagerCents) / 100).toFixed(2);
+      }
+    }
+
+    function setControlsDisabled(disabled) {
+      lockable.forEach((control) => {
+        control.disabled = disabled;
+      });
+    }
+
+    function renderRoad() {
+      road.replaceChildren();
+      const table = ladder();
+      const fragment = document.createDocumentFragment();
+      for (let lane = 0; lane < lanes; lane += 1) {
+        const cell = document.createElement("div");
+        cell.className = "lane";
+        cell.dataset.lane = lane;
+        if (lane < currentLane) cell.classList.add("crossed");
+        if (!roundComplete && lane === currentLane) cell.classList.add("here");
+
+        const bird = document.createElement("div");
+        bird.className = "lane-bird";
+        bird.setAttribute("aria-hidden", "true");
+        bird.textContent = lane < currentLane ? "✅" : (lane === currentLane ? "🐔" : "");
+        const hole = document.createElement("div");
+        hole.className = "manhole";
+        hole.setAttribute("aria-hidden", "true");
+        const mult = document.createElement("span");
+        mult.className = "lane-mult";
+        mult.textContent = `×${table[lane]}`;
+        cell.append(bird, hole, mult);
+        cell.setAttribute("aria-label", `Lane ${lane + 1}, pays ×${table[lane]}`);
+        fragment.append(cell);
+      }
+      road.append(fragment);
+    }
+
+    function laneCell(lane) {
+      return road.querySelector(`.lane[data-lane="${lane}"]`);
+    }
+
+    function renderWins() {
+      recentWins.replaceChildren();
+      if (wins.length === 0) {
+        recentWins.textContent = "No wins yet — cross and cash out!";
+        return;
+      }
+      wins.slice(0, 5).forEach((amount) => {
+        const chip = document.createElement("span");
+        chip.className = "win-chip";
+        chip.textContent = `You +${formatCurrency(amount)}`;
+        recentWins.append(chip);
+      });
+    }
+
+    function readSettings() {
+      lanes = Number(laneCountInput.value);
+      wagerCents = parseWagerCents(wagerInput.value);
+      if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > balanceCents) {
+        message.textContent = "Enter a bet from €0.10 up to your available account balance.";
+        message.className = "message lose";
+        return false;
+      }
+      if (!Number.isInteger(lanes) || lanes < 5 || lanes > 10) {
+        message.textContent = "Choose 5 to 10 lanes.";
+        message.className = "message lose";
+        return false;
+      }
+      return true;
+    }
+
+    function startRound() {
+      roundComplete = false;
+      roundBusy = false;
+      currentLane = 0;
+      earnedCents = 0;
+      betPlaced = false;
+      roundId = null;
+      laneCountInput.value = lanes;
+      wagerInput.value = (wagerCents / 100).toFixed(2);
+      renderRoad();
+      message.textContent = balanceCents >= wagerCents && wagerCents >= MIN_WAGER_CENTS
+        ? `Set your bet and press GO! First lane pays ×${ladder()[0]}.`
+        : "Your account balance is too low for this bet.";
+      message.className = "message";
+      crossButton.hidden = false;
+      crossButton.disabled = false;
+      cashOutButton.hidden = false;
+      themeToggle.disabled = false;
+      updateCashOut();
+      playAgainRow.hidden = true;
+      setControlsDisabled(false);
+      updateWagerLimit();
+      updateMaxWin();
+    }
+
+    async function crossLane() {
+      if (roundComplete || roundBusy) return;
+      if (!betPlaced && !readSettings()) return;
+      roundBusy = true;
+      crossButton.disabled = true;
+
+      if (!betPlaced) {
+        try {
+          const round = await api("/api/chicken/rounds", { mode: gameMode, difficulty, lanes, wagerCents });
+          roundId = round.roundId;
+          balanceCents = round.balanceCents;
+          if (round.difficulty && LANE_LADDERS[round.difficulty]) {
+            difficulty = round.difficulty;
+            syncDiffButtons();
+          }
+          if (Array.isArray(round.multipliers) && round.multipliers.length === lanes) {
+            round.multipliers.forEach((mult, step) => {
+              if (typeof mult === "number" && mult > 0) ladder()[step] = mult;
+            });
+            renderRoad();
+          }
+          betPlaced = true;
+          updateBalanceDisplay();
+          updateWagerLimit();
+          setControlsDisabled(true);
+          themeToggle.disabled = true;
+        } catch (error) {
+          roundBusy = false;
+          crossButton.disabled = false;
+          void refreshBalance();
+          message.textContent = error.message;
+          message.className = "message lose";
+          return;
+        }
+      }
+
+      try {
+        const result = await api(`/api/chicken/rounds/${roundId}/cross`, {});
+        balanceCents = result.balanceCents;
+        updateBalanceDisplay();
+        const crossedCell = laneCell(currentLane);
+
+        if (!result.safe) {
+          if (crossedCell) {
+            crossedCell.classList.add("crashed");
+            const hit = document.createElement("div");
+            hit.className = "car-hit";
+            hit.setAttribute("aria-hidden", "true");
+            hit.textContent = "🚗";
+            crossedCell.append(hit);
+            const bird = crossedCell.querySelector(".lane-bird");
+            sfx.crash();
+            window.setTimeout(() => {
+              hit.remove();
+              if (bird) bird.textContent = "💥";
+              revealLanes(result.lanes);
+              completeRound("Crash! A car got the chicken. Earned payouts stay in your balance.", "lose", { result: "crashed", lane: currentLane });
+            }, 600);
+          } else {
+            revealLanes(result.lanes);
+            completeRound("Crash! The round is over. Earned payouts stay in your balance.", "lose");
+          }
+          return;
+        }
+
+        const payoutCents = Number.isSafeInteger(result.payoutCents) ? result.payoutCents : 0;
+        earnedCents += payoutCents;
+        sfx.cross(result.currentLane);
+        const multiplierLabel = Number(result.multiplier) > 0 ? `×${result.multiplier}` : "×—";
+        currentLane = result.currentLane;
+        renderRoad();
+        updateCashOut();
+
+        if (result.status === "won") {
+          revealLanes(result.lanes);
+          wins.unshift(earnedCents);
+          renderWins();
+          sfx.win();
+          celebrate();
+          completeRound(`All ${lanes} lanes crossed! Last payout ${formatCurrency(payoutCents)}.`, "win", { result: "cleared" });
+          return;
+        }
+
+        roundBusy = false;
+        crossButton.disabled = false;
+        message.textContent = `Crossed ${multiplierLabel}! +${formatCurrency(payoutCents)}. Cash out ${formatCurrency(earnedCents)} or keep going.`;
+        message.className = "message win";
+      } catch (error) {
+        roundBusy = false;
+        crossButton.disabled = false;
+        message.textContent = error.message;
+        message.className = "message lose";
+      }
+    }
+
+    function revealLanes(serverLanes) {
+      if (!Array.isArray(serverLanes)) return;
+      serverLanes.forEach((safe, lane) => {
+        if (lane < currentLane) return;
+        const cell = laneCell(lane);
+        if (!cell || cell.classList.contains("crashed")) return;
+        cell.querySelector(".lane-bird").textContent = safe ? "✅" : "🚗";
+      });
+    }
+
+    function completeRound(resultMessage, resultClass, outcome) {
+      roundComplete = true;
+      roundBusy = false;
+      if (outcome) recordHistory(outcome);
+      crossButton.hidden = true;
+      cashOutButton.hidden = true;
+      message.textContent = resultMessage;
+      message.className = `message ${resultClass}`;
+      updateBalanceDisplay();
+      wagerCents = Math.min(wagerCents, balanceCents);
+      if (balanceCents >= MIN_WAGER_CENTS && wagerCents < MIN_WAGER_CENTS) {
+        wagerCents = MIN_WAGER_CENTS;
+      }
+      wagerInput.value = balanceCents >= MIN_WAGER_CENTS
+        ? (wagerCents / 100).toFixed(2)
+        : 0;
+      updateWagerLimit();
+      setControlsDisabled(false);
+      themeToggle.disabled = false;
+      playAgainRow.hidden = false;
+      playAgainButton.focus();
+    }
+
+    async function cashOut() {
+      if (roundComplete || roundBusy || !betPlaced || currentLane <= 0) return;
+      roundBusy = true;
+      cashOutButton.disabled = true;
+      crossButton.disabled = true;
+      try {
+        const result = await api(`/api/chicken/rounds/${roundId}/cashout`, {});
+        balanceCents = result.balanceCents;
+        revealLanes(result.lanes);
+        if (earnedCents > 0) {
+          wins.unshift(earnedCents);
+          renderWins();
+        }
+        sfx.cash();
+        if (earnedCents >= wagerCents * 5) celebrate();
+        completeRound(`Cashed out ${formatCurrency(earnedCents)} after ${currentLane} lane${currentLane === 1 ? "" : "s"}. Balance ${formatCurrency(balanceCents)}.`, "win", { result: "cashed" });
+      } catch (error) {
+        if (error.message.includes("no longer active")) {
+          // Round is gone server-side (e.g. abandoned from another tab):
+          // drop the dead round instead of stranding the UI on it.
+          startRound();
+        } else {
+          roundBusy = false;
+          cashOutButton.disabled = false;
+          crossButton.disabled = false;
+        }
+        message.textContent = error.message;
+        message.className = "message lose";
+      }
+    }
+
+    function syncDiffButtons() {
+      diffButtons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.difficulty === difficulty));
+      });
+    }
+
+    diffButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        difficulty = button.dataset.difficulty;
+        syncDiffButtons();
+        updateMaxWin();
+        if (!betPlaced) {
+          lanes = Number(laneCountInput.value);
+          renderRoad();
+        }
+      });
+    });
+
+    laneCountInput.addEventListener("change", () => {
+      updateMaxWin();
+      if (!betPlaced) {
+        lanes = Number(laneCountInput.value) || lanes;
+        renderRoad();
+      }
+    });
+
+    wagerInput.addEventListener("input", updateMaxWin);
+
+    presetButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        wagerInput.value = Number(button.dataset.preset).toFixed(2);
+      });
+    });
+
+    document.querySelector("#bet-min").addEventListener("click", () => {
+      wagerInput.value = "0.10";
+    });
+    document.querySelector("#bet-max").addEventListener("click", () => {
+      wagerInput.value = (Math.min(balanceCents, 10000) / 100).toFixed(2);
+    });
+
+    settingsForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void crossLane();
+    });
+    crossButton.addEventListener("click", () => void crossLane());
+    cashOutButton.addEventListener("click", () => void cashOut());
+    playAgainButton.addEventListener("click", () => void startRound());
+
+    async function initialize() {
+      if (window.location.protocol === "file:") {
+        roundComplete = true;
+        crossButton.hidden = true;
+        message.textContent = "Open Chicken Road through TAX Casino at http://localhost:3000/chicken.html to use your account wallet.";
+        message.className = "message lose";
+        return;
+      }
+
+      try {
+        const account = await api("/api/me");
+        balanceCents = account.balanceCents;
+        updateBalanceDisplay();
+        updateWagerLimit();
+        renderWins();
+        renderHistory();
+        updateMaxWin();
+        startRound();
+      } catch (error) {
+        roundComplete = true;
+        crossButton.hidden = true;
+        message.textContent = error.message;
+        message.className = "message lose";
+        if (error.status === 401) {
+          window.location.replace("/");
+        }
+      }
+    }
+
+    async function refreshBalance() {
+      try {
+        const account = await api("/api/me");
+        balanceCents = account.balanceCents;
+        updateBalanceDisplay();
+        updateWagerLimit();
+      } catch {
+        // Keep the current display; the next action revalidates server-side.
+      }
+    }
+
+    window.addEventListener("focus", () => {
+      if (!betPlaced && !roundBusy) void refreshBalance();
+    });
+
+    void initialize();
+  </script>
+</body>
+</html>

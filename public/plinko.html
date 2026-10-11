@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100b1c">
+  <title>Plinko</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f5f0e8;
+      background: #100b1c;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px 14px;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(111, 71, 161, .27), transparent 42%),
+        radial-gradient(ellipse at 95% 40%, rgba(179, 124, 48, .08), transparent 30%),
+        #100b1c;
+    }
+
+    .layout {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: center;
+      gap: 30px;
+    }
+
+    .side-art { display: none; flex-direction: column; gap: 30px; }
+
+    .medallion {
+      display: grid;
+      width: 112px;
+      height: 112px;
+      place-items: center;
+      border: 1px solid rgba(240, 201, 107, .4);
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, rgba(88, 57, 111, .9), rgba(22, 16, 34, .9));
+      box-shadow: 0 0 30px rgba(169, 119, 213, .18), inset 0 1px 0 rgba(255, 255, 255, .1);
+      font-size: 3.2rem;
+      animation: floaty 5.5s ease-in-out infinite;
+    }
+
+    .side-art .medallion:nth-child(2) { animation-delay: -1.8s; }
+    .side-art .medallion:nth-child(3) { animation-delay: -3.6s; }
+
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0) rotate(-5deg); }
+      50% { transform: translateY(-14px) rotate(5deg); }
+    }
+
+    @media (min-width: 1250px) {
+      .side-art { display: flex; }
+    }
+
+    [data-theme="light"] { color-scheme: light; color: #30243a; background: #f4eff8; }
+    [data-theme="light"] body {
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 42%),
+        #f4eff8;
+    }
+    [data-theme="light"] .game {
+      border-color: #ddd0e8;
+      background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(246, 240, 251, .98));
+    }
+    [data-theme="light"] h1 { color: #382544; text-shadow: none; }
+    [data-theme="light"] .tagline { color: #71667a; }
+    [data-theme="light"] .stat {
+      border-color: #e2d3af;
+      background: linear-gradient(145deg, #fffdf7, #f8f0dc);
+    }
+    [data-theme="light"] .stat-value { color: #805b1d; }
+    [data-theme="light"] .stat-label { color: #71667a; }
+    [data-theme="light"] .panel {
+      border-color: #d8c9e3;
+      background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(246, 240, 251, .98));
+    }
+    [data-theme="light"] .panel-row { color: #51445b; }
+    [data-theme="light"] .rows-select,
+    [data-theme="light"] .bet-input {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #30243a;
+    }
+    [data-theme="light"] .chip-btn {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #49345a;
+    }
+    [data-theme="light"] .chip-btn.edge { color: #805b1d; }
+    [data-theme="light"] .risk-btn { color: #71667a; }
+    [data-theme="light"] .risk-btn[aria-pressed="true"] {
+      background: rgba(128, 91, 29, .1);
+      color: #805b1d;
+      box-shadow: inset 0 -3px 0 #c99a3c;
+    }
+    [data-theme="light"] .message { color: #51445b; }
+    [data-theme="light"] .theme-toggle {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #49345a;
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      min-height: 36px;
+      align-items: center;
+      margin: 10px 0 0;
+      padding: 0 14px;
+      border: 1px solid #665477;
+      border-radius: 10px;
+      background: #21192d;
+      color: #f5f0e8;
+      cursor: pointer;
+      font: inherit;
+      font-size: .82rem;
+      font-weight: 700;
+    }
+    .theme-toggle:disabled { cursor: default; opacity: .55; }
+
+    .game { width: min(100%, 760px); text-align: center; }
+
+    .home-link {
+      display: inline-flex;
+      min-height: 40px;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 0 16px;
+      border: 1px solid #f1d27e;
+      border-radius: 11px;
+      background: linear-gradient(180deg, #e3bd62, #bc8d32);
+      color: #241a08;
+      font-size: .88rem;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    h1 {
+      margin: 0;
+      color: #fff8ed;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      text-shadow: 0 3px 20px rgba(240, 201, 107, .18);
+    }
+
+    .tagline { margin: 8px 0 0; color: #aaa2b8; font-size: .95rem; }
+
+    .scoreboard {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 20px 0 14px;
+    }
+
+    .stat {
+      padding: 12px 8px;
+      border: 1px solid rgba(240, 201, 107, .25);
+      border-radius: 15px;
+      background: linear-gradient(145deg, rgba(45, 34, 63, .9), rgba(31, 23, 46, .94));
+    }
+
+    .stat-value {
+      display: block;
+      color: #ffe8a4;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.4rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-label {
+      display: block;
+      margin-top: 2px;
+      color: #aaa2b8;
+      font-size: .68rem;
+      font-weight: 750;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .board {
+      position: relative;
+      width: 100%;
+      max-width: 640px;
+      height: 420px;
+      margin: 0 auto;
+      overflow: hidden;
+      border: 1px solid rgba(217, 169, 255, .32);
+      border-radius: 22px;
+      background: radial-gradient(ellipse at 50% 0%, rgba(111, 71, 161, .35), transparent 70%), #191326;
+      box-shadow: inset 0 0 35px rgba(0, 0, 0, .36), 0 10px 30px rgba(0, 0, 0, .2);
+    }
+
+    .peg {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #cdbfe6;
+      box-shadow: 0 0 6px rgba(205, 191, 230, .7);
+      transform: translate(-50%, -50%);
+    }
+
+    .peg.hit { background: #ffe8a4; box-shadow: 0 0 12px rgba(255, 232, 164, .95); }
+
+    .ball {
+      position: absolute;
+      z-index: 2;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff6db, #f0c96b 70%);
+      box-shadow: 0 0 16px rgba(240, 201, 107, .9);
+      transform: translate(-50%, -50%);
+    }
+
+    .slots {
+      display: flex;
+      gap: 4px;
+      width: 100%;
+      max-width: 640px;
+      margin: 10px auto 0;
+    }
+
+    .slot {
+      flex: 1;
+      min-width: 0;
+      padding: 8px 2px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, .05);
+      color: #d8d0e4;
+      font-size: .68rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .slot.t1 { background: rgba(240, 201, 107, .16); color: #ffe8a4; }
+    .slot.t2 { background: rgba(240, 201, 107, .3); color: #ffe8a4; box-shadow: 0 0 10px rgba(240, 201, 107, .25); }
+    .slot.t3 { background: rgba(169, 119, 213, .35); color: #fff; box-shadow: 0 0 12px rgba(169, 119, 213, .45); }
+    .slot.win { outline: 3px solid #83e2a7; outline-offset: 1px; }
+
+    .message {
+      min-height: 30px;
+      margin: 14px 0 10px;
+      color: #d8d0e4;
+      font-size: 1rem;
+      font-weight: 650;
+    }
+
+    .message.win { color: #83e2a7; }
+    .message.lose { color: #ff9b88; }
+
+    .history {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      min-height: 28px;
+      margin: 0 0 10px;
+    }
+
+    .history-label { color: #aaa2b8; font-size: .78rem; align-self: center; }
+
+    .hist-chip {
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .hist-chip.good { background: rgba(131, 226, 167, .12); color: #83e2a7; }
+    .hist-chip.bad { background: rgba(255, 155, 136, .12); color: #ff9b88; }
+
+    .panel {
+      padding: 14px;
+      border: 1px solid rgba(227, 190, 255, .16);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(36, 28, 52, .98), rgba(25, 19, 38, .98));
+    }
+
+    .panel-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: #d8d0e4;
+      font-size: .88rem;
+      font-weight: 700;
+    }
+
+    .sound-btn {
+      min-height: 38px;
+      padding: 0 12px;
+      border: 1px solid #504264;
+      border-radius: 10px;
+      background: #21192d;
+      color: #d8d0e4;
+      cursor: pointer;
+      font: inherit;
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    .rows-select {
+      min-height: 38px;
+      padding: 0 10px;
+      border: 1px solid #504264;
+      border-radius: 10px;
+      background: #120e1b;
+      color: #f5f0e8;
+      font: inherit;
+      font-size: .85rem;
+      font-weight: 700;
+    }
+
+    .bet-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .bet-input {
+      width: 110px;
+      min-height: 44px;
+      border: 1px solid #504264;
+      border-radius: 10px;
+      background: #120e1b;
+      color: #f5f0e8;
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 800;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chip-btn {
+      min-height: 44px;
+      min-width: 52px;
+      padding: 0 10px;
+      border: 1px solid #504264;
+      border-radius: 10px;
+      background: #21192d;
+      color: #d8d0e4;
+      cursor: pointer;
+      font: inherit;
+      font-size: .82rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chip-btn:disabled { cursor: default; opacity: .45; }
+    .chip-btn.edge { border-color: rgba(240, 201, 107, .5); color: #ffe8a4; }
+
+    .risk-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .risk-btn {
+      min-height: 40px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: #aaa2b8;
+      cursor: pointer;
+      font: inherit;
+      font-size: .85rem;
+      font-weight: 700;
+    }
+
+    .risk-btn[aria-pressed="true"] {
+      background: rgba(240, 201, 107, .12);
+      color: #ffe8a4;
+      box-shadow: inset 0 -3px 0 #f0c96b;
+    }
+
+    .risk-btn:disabled { cursor: default; opacity: .45; }
+
+    .drop-btn {
+      width: 100%;
+      min-height: 56px;
+      border: 0;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #2cbb75, #188653);
+      box-shadow: 0 5px 0 #0a4b2c;
+      color: #f4ffef;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: .06em;
+    }
+
+    .drop-btn:disabled { cursor: wait; opacity: .65; }
+
+    @media (max-width: 520px) {
+      body { padding: 14px 8px; }
+      .board { height: 340px; }
+      .slot { font-size: .58rem; padding: 6px 1px; }
+      .scoreboard { grid-template-columns: repeat(3, 1fr); gap: 7px; }
+      .stat { padding: 10px 4px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="side-art" aria-hidden="true">
+      <div class="medallion">🔴</div>
+      <div class="medallion">🎯</div>
+      <div class="medallion">🪙</div>
+    </aside>
+    <main class="game">
+      <a class="home-link" href="./lobby.html">← Back to TAX Casino</a>
+      <h1>Plinko</h1>
+      <p class="tagline">Drop the ball. Every bounce is 50/50 — edges pay big.</p>
+      <div><button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to light theme</button></div>
+
+      <section class="scoreboard" aria-label="Account balance and game score">
+        <div class="stat"><span class="stat-value" id="balance">€100.00</span><span class="stat-label">Balance</span></div>
+        <div class="stat"><span class="stat-value" id="drops">0</span><span class="stat-label">Drops</span></div>
+        <div class="stat"><span class="stat-value" id="best">—</span><span class="stat-label">Best</span></div>
+      </section>
+
+      <div class="board" id="board" role="img" aria-label="Plinko board"></div>
+      <div class="slots" id="slots" aria-hidden="true"></div>
+      <p class="message" id="message" aria-live="polite">Set your bet and press DROP!</p>
+      <div class="history" id="history" aria-live="polite"></div>
+
+      <section class="panel" aria-label="Game controls">
+        <form id="settings">
+          <div class="panel-row">
+            <button class="sound-btn" id="sound-toggle" type="button" aria-pressed="true">Sound: On</button>
+            <label>Rows
+              <select class="rows-select" id="row-count" name="rows">
+                <option value="8">8</option>
+                <option value="12" selected>12</option>
+                <option value="16">16</option>
+              </select>
+            </label>
+          </div>
+          <div class="bet-row">
+            <button class="chip-btn edge" id="bet-min" type="button" data-lock>MIN</button>
+            <button class="chip-btn" type="button" data-lock data-preset="0.50">0.5</button>
+            <button class="chip-btn" type="button" data-lock data-preset="1">1</button>
+            <button class="chip-btn" type="button" data-lock data-preset="2">2</button>
+            <button class="chip-btn" type="button" data-lock data-preset="10">10</button>
+            <input class="bet-input" id="wager" name="wager" type="number" min="0.10" max="100" value="10" step="0.01" required aria-label="Bet amount in euros">
+            <button class="chip-btn edge" id="bet-max" type="button" data-lock>MAX</button>
+          </div>
+        </form>
+        <div class="risk-row" role="group" aria-label="Risk level">
+          <button class="risk-btn" type="button" data-lock data-risk="low" aria-pressed="false">Low</button>
+          <button class="risk-btn" type="button" data-lock data-risk="medium" aria-pressed="true">Medium</button>
+          <button class="risk-btn" type="button" data-lock data-risk="high" aria-pressed="false">High</button>
+        </div>
+        <button class="drop-btn" id="drop" type="button">DROP</button>
+      </section>
+    </main>
+    <aside class="side-art" aria-hidden="true">
+      <div class="medallion">⚪</div>
+      <div class="medallion">💰</div>
+      <div class="medallion">🏆</div>
+    </aside>
+  </div>
+
+  <script>
+    const DEFAULT_ROWS = 12;
+    const DEFAULT_WAGER = 10;
+    const MIN_WAGER_CENTS = 10;
+    const STEP_MS = 70;
+    // Display copy of the server tables (PLINKO_TABLES in server.js).
+    // Server payouts are authoritative.
+    const TABLES = {
+      low: {
+        8:  [5.6, 2.1, 1.1, 1, 0.5, 1, 1.1, 2.1, 5.6],
+        12: [10, 3, 1.6, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 1.6, 3, 10],
+        16: [16, 9, 2, 1.4, 1.4, 1.2, 1.1, 1, 0.5, 1, 1.1, 1.2, 1.4, 1.4, 2, 9, 16]
+      },
+      medium: {
+        8:  [13, 3, 1.3, 0.7, 0.4, 0.7, 1.3, 3, 13],
+        12: [33, 4, 2, 1.1, 0.6, 0.4, 0.3, 0.4, 0.6, 1.1, 2, 4, 33],
+        16: [110, 41, 10, 5, 3, 1.5, 1, 0.5, 0.3, 0.5, 1, 1.5, 3, 5, 10, 41, 110]
+      },
+      high: {
+        8:  [29, 4, 1.5, 0.3, 0.2, 0.3, 1.5, 4, 29],
+        12: [170, 24, 8.1, 2, 0.7, 0.2, 0.2, 0.2, 0.7, 2, 8.1, 24, 170],
+        16: [1000, 130, 26, 9, 4, 2, 0.2, 0.2, 0.2, 0.2, 0.2, 2, 4, 9, 26, 130, 1000]
+      }
+    };
+    const settingsForm = document.querySelector("#settings");
+    const rowCountInput = document.querySelector("#row-count");
+    const wagerInput = document.querySelector("#wager");
+    const board = document.querySelector("#board");
+    const themeToggle = document.querySelector("#theme-toggle");
+    const slotsBar = document.querySelector("#slots");    const message = document.querySelector("#message");
+    const dropButton = document.querySelector("#drop");
+    const balanceDisplay = document.querySelector("#balance");
+    const dropsDisplay = document.querySelector("#drops");
+    const bestDisplay = document.querySelector("#best");
+    const historyStrip = document.querySelector("#history");
+    const soundToggle = document.querySelector("#sound-toggle");
+    const riskButtons = [...document.querySelectorAll("[data-risk]")];
+    const lockable = [...settingsForm.querySelectorAll("select, input"), ...document.querySelectorAll("[data-lock]")];
+
+    let rows = DEFAULT_ROWS;
+    let risk = "medium";
+    let wagerCents = DEFAULT_WAGER * 100;
+    let balanceCents = 0;
+    let dropping = false;
+    let drops = 0;
+    let bestMult = 0;
+    let gameMode = "fixed";
+    let history = [];
+    const HISTORY_KEY = "plinko-history-v1";
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+      if (Array.isArray(saved)) history = saved.slice(0, 10);
+    } catch {
+      history = [];
+    }
+
+    const SOUND_KEY = "plinko-sound";
+    let soundOn = true;
+    try {
+      soundOn = localStorage.getItem(SOUND_KEY) !== "off";
+    } catch {
+      soundOn = true;
+    }
+    let audioCtx = null;
+    function tone(freq, dur, type = "sine", when = 0, vol = 0.12) {
+      if (!soundOn) return;
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return;
+        audioCtx = audioCtx || new Ctor();
+        if (audioCtx.state === "suspended") void audioCtx.resume();
+        const t = audioCtx.currentTime + when;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + dur + 0.02);
+      } catch {
+        // Audio unavailable: game stays silent.
+      }
+    }
+
+    function syncSoundButton() {
+      soundToggle.setAttribute("aria-pressed", String(soundOn));
+      soundToggle.textContent = soundOn ? "Sound: On" : "Sound: Off";
+    }
+    soundToggle.addEventListener("click", () => {
+      soundOn = !soundOn;
+      try {
+        localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
+      } catch { /* session choice still applies */ }
+      syncSoundButton();
+    });
+    syncSoundButton();
+
+    function table() {
+      return (TABLES[risk] && TABLES[risk][rows]) || TABLES.medium[12];
+    }
+
+    function updateTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      const isLight = theme === "light";
+      gameMode = isLight ? "luck" : "fixed";
+      themeToggle.setAttribute("aria-pressed", String(isLight));
+      themeToggle.textContent = isLight
+        ? "Switch to dark theme"
+        : "Switch to light theme";
+      themeToggle.title = isLight
+        ? "Switches to the dark theme"
+        : "Switches to the light theme";
+      document.querySelector('meta[name="theme-color"]').content = isLight ? "#f4eff8" : "#100b1c";
+      localStorage.setItem("plinko-theme", theme);
+    }
+
+    themeToggle.addEventListener("click", () => {
+      if (themeToggle.disabled || dropping) return;
+      updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+    });
+
+    updateTheme(localStorage.getItem("plinko-theme") === "light" ? "light" : "dark");
+
+    function slotClass(mult) {
+      if (mult >= 20) return "t3";
+      if (mult >= 2) return "t2";
+      if (mult >= 1) return "t1";
+      return "";
+    }
+
+    async function api(path, body) {
+      if (window.location.protocol === "file:") {
+        throw new Error("Open Plinko through TAX Casino at http://localhost:3000/plinko.html to use your account wallet.");
+      }
+      const response = await fetch(path, {
+        credentials: "same-origin",
+        ...(body === undefined ? {} : {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        })
+      });
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("The server returned an invalid response. Please try again.");
+      }
+      if (!response.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+      }
+      return data;
+    }
+
+    function parseWagerCents(value) {
+      const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+      if (!match) return NaN;
+      const cents = Number(match[1]) * 100 + Number((match[2] || "").padEnd(2, "0"));
+      return Number.isSafeInteger(cents) ? cents : NaN;
+    }
+
+    function formatCurrency(cents) {
+      return new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(cents / 100);
+    }
+
+    function updateBalanceDisplay() {
+      balanceDisplay.textContent = formatCurrency(balanceCents);
+    }
+
+    function updateWagerLimit() {
+      const maxWagerCents = Math.min(balanceCents, 10000);
+      wagerInput.max = (maxWagerCents / 100).toFixed(2);
+      wagerInput.disabled = maxWagerCents < MIN_WAGER_CENTS || dropping;
+      if (maxWagerCents < MIN_WAGER_CENTS) {
+        wagerInput.value = 0;
+        return;
+      }
+      const enteredCents = parseWagerCents(wagerInput.value);
+      if (!Number.isSafeInteger(enteredCents) || enteredCents > maxWagerCents) {
+        wagerInput.value = (maxWagerCents / 100).toFixed(2);
+      } else if (enteredCents < MIN_WAGER_CENTS) {
+        wagerInput.value = (Math.min(wagerCents, maxWagerCents) / 100).toFixed(2);
+      }
+    }
+
+    function setControlsDisabled(disabled) {
+      lockable.forEach((control) => { control.disabled = disabled; });
+    }
+
+    function boardMetrics() {
+      const rect = board.getBoundingClientRect();
+      // Gap matches the slot bins below: (rows+1) bins share 100% width,
+      // so the ball lands exactly on its winning bin.
+      return { height: rect.height, gap: 100 / (rows + 1), rowH: (rect.height - 70) / rows };
+    }
+
+    function renderBoard() {
+      board.replaceChildren();
+      slotsBar.replaceChildren();
+      const { width, height, gap, rowH } = boardMetrics();
+      for (let r = 0; r < rows; r += 1) {
+        for (let i = 0; i <= r; i += 1) {
+          const peg = document.createElement("div");
+          peg.className = "peg";
+          peg.dataset.row = r;
+          peg.dataset.pos = i;
+          peg.style.left = `${50 + (i - r / 2) * gap}%`;
+          peg.style.top = `${12 + (r + 0.5) * rowH}px`;
+          peg.setAttribute("aria-hidden", "true");
+          board.append(peg);
+        }
+      }
+      table().forEach((mult, slot) => {
+        const bin = document.createElement("div");
+        bin.className = `slot ${slotClass(mult)}`;
+        bin.dataset.slot = slot;
+        bin.textContent = `×${mult}`;
+        bin.title = `Slot ${slot + 1}: ×${mult}`;
+        slotsBar.append(bin);
+      });
+    }
+
+    function renderHistory() {
+      historyStrip.replaceChildren();
+      if (history.length === 0) return;
+      const label = document.createElement("span");
+      label.className = "history-label";
+      label.textContent = "Recent:";
+      historyStrip.append(label);
+      history.slice(0, 8).forEach((entry) => {
+        const chip = document.createElement("span");
+        chip.className = `hist-chip ${entry.multiplier >= 1 ? "good" : "bad"}`;
+        chip.textContent = `${formatCurrency(entry.bet)} · ${entry.rows}R · ×${entry.multiplier}`;
+        historyStrip.append(chip);
+      });
+    }
+
+    function recordHistory(entry) {
+      history.unshift(entry);
+      history = history.slice(0, 10);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      } catch { /* session-only */ }
+      renderHistory();
+    }
+
+    function delay(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    async function drop() {
+      if (dropping) return;
+      if (!settingsForm.reportValidity()) return;
+      rows = Number(rowCountInput.value);
+      wagerCents = parseWagerCents(wagerInput.value);
+      if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > balanceCents) {
+        message.textContent = "Enter a bet from €0.10 up to your available account balance.";
+        message.className = "message lose";
+        return;
+      }
+      dropping = true;
+      dropButton.disabled = true;
+      themeToggle.disabled = true;
+      setControlsDisabled(true);
+      message.textContent = "Dropping…";
+      message.className = "message";
+
+      let result;
+      try {
+        result = await api("/api/plinko/drop", { rows, risk, mode: gameMode, wagerCents });
+      } catch (error) {
+        dropping = false;
+        dropButton.disabled = false;
+        themeToggle.disabled = false;
+        setControlsDisabled(false);
+        updateWagerLimit();
+        void refreshBalance();
+        message.textContent = error.message;
+        message.className = "message lose";
+        if (error.status === 401) window.location.replace("/");
+        return;
+      }
+
+      renderBoard();
+      const { gap, rowH } = boardMetrics();
+      const ball = document.createElement("div");
+      ball.className = "ball";
+      ball.style.left = "50%";
+      ball.style.top = "6px";
+      board.append(ball);
+
+      let rights = 0;
+      for (let step = 0; step < rows; step += 1) {
+        rights += result.path[step] === 1 ? 1 : 0;
+        await delay(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : STEP_MS);
+        ball.style.left = `${50 + (rights - (step + 1) / 2) * gap}%`;
+        ball.style.top = `${12 + (step + 1) * rowH}px`;
+        const peg = board.querySelector(`.peg[data-row="${step}"][data-pos="${rights - (result.path[step] === 1 ? 1 : 0)}"]`);
+        if (peg) peg.classList.add("hit");
+        tone(500 + step * 25, 0.06, "square", 0, 0.05);
+      }
+      await delay(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 120);
+
+      const mult = Number(result.multiplier);
+      const payoutCents = Number.isSafeInteger(result.payoutCents) ? result.payoutCents : 0;
+      balanceCents = result.balanceCents;
+      updateBalanceDisplay();
+      const bin = slotsBar.querySelector(`.slot[data-slot="${result.slot}"]`);
+      if (bin) bin.classList.add("win");
+      drops += 1;
+      dropsDisplay.textContent = drops;
+      if (mult > bestMult) {
+        bestMult = mult;
+        bestDisplay.textContent = `×${mult}`;
+      }
+      recordHistory({ bet: wagerCents, rows, risk, multiplier: mult });
+
+      const profited = mult >= 1;
+      if (mult >= 10) {
+        tone(523, 0.15, "triangle", 0, 0.14);
+        tone(659, 0.15, "triangle", 0.12, 0.14);
+        tone(784, 0.25, "triangle", 0.24, 0.14);
+      } else if (profited) {
+        tone(880, 0.15, "sine", 0, 0.14);
+      } else {
+        tone(220, 0.2, "sine", 0, 0.12);
+      }
+      message.textContent = `Landed ×${mult} — ${formatCurrency(payoutCents)} returned on ${formatCurrency(wagerCents)}.`;
+      message.className = profited ? "message win" : "message lose";
+
+      dropping = false;
+      dropButton.disabled = false;
+      themeToggle.disabled = false;
+      setControlsDisabled(false);
+      updateWagerLimit();
+    }
+
+    function syncRiskButtons() {
+      riskButtons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.risk === risk));
+      });
+    }
+
+    riskButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        risk = button.dataset.risk;
+        syncRiskButtons();
+        if (!dropping) renderBoard();
+      });
+    });
+
+    document.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        wagerInput.value = Number(button.dataset.preset).toFixed(2);
+      });
+    });
+    document.querySelector("#bet-min").addEventListener("click", () => { wagerInput.value = "0.10"; });
+    document.querySelector("#bet-max").addEventListener("click", () => {
+      wagerInput.value = (Math.min(balanceCents, 10000) / 100).toFixed(2);
+    });
+    rowCountInput.addEventListener("change", () => {
+      rows = Number(rowCountInput.value) || rows;
+      if (!dropping) renderBoard();
+    });
+
+    settingsForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void drop();
+    });
+    dropButton.addEventListener("click", () => void drop());
+    window.addEventListener("resize", () => { if (!dropping) renderBoard(); });
+
+    async function initialize() {
+      if (window.location.protocol === "file:") {
+        message.textContent = "Open Plinko through TAX Casino at http://localhost:3000/plinko.html to use your account wallet.";
+        message.className = "message lose";
+        dropButton.disabled = true;
+        return;
+      }
+      try {
+        const account = await api("/api/me");
+        balanceCents = account.balanceCents;
+        updateBalanceDisplay();
+        updateWagerLimit();
+        renderBoard();
+        renderHistory();
+      } catch (error) {
+        message.textContent = error.message;
+        message.className = "message lose";
+        if (error.status === 401) window.location.replace("/");
+      }
+    }
+
+    async function refreshBalance() {
+      try {
+        const account = await api("/api/me");
+        balanceCents = account.balanceCents;
+        updateBalanceDisplay();
+        updateWagerLimit();
+      } catch {
+        // Keep the current display; the next action revalidates server-side.
+      }
+    }
+
+    window.addEventListener("focus", () => {
+      if (!dropping) void refreshBalance();
+    });
+
+    void initialize();
+  </script>
+</body>
+</html>

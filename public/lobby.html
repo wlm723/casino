@@ -658,6 +658,24 @@
         available: true
       },
       {
+        id: "chicken",
+        name: "Chicken Road",
+        description: "Guide the chicken across the road, lane by lane, and cash out before the crash.",
+        category: "quick-games",
+        icon: "chicken",
+        url: "/chicken.html",
+        available: true
+      },
+      {
+        id: "plinko",
+        name: "Plinko",
+        description: "Drop the ball down the peg board and land a multiplier slot.",
+        category: "quick-games",
+        icon: "plinko",
+        url: "/plinko.html",
+        available: true
+      },
+      {
         id: "coin-flip",
         name: "Coin Flip",
         description: "Call the toss and see which side turns up.",
@@ -701,6 +719,26 @@
         { tag: "path", attrs: { d: "M60 8 99 43 60 88 21 43 60 8Z", fill: "#f0c96b", stroke: "#ffe8a4", "stroke-width": 3 } },
         { tag: "path", attrs: { d: "m21 43 39 2 39-2M60 45l-12 42m12-42 12 42", fill: "none", stroke: "#a86fd1", "stroke-width": 3 } },
         { tag: "path", attrs: { d: "m60 15 29 28-29 36-29-36 29-28Z", fill: "#d9a9ff", opacity: ".6" } }
+      ],
+      plinko: [
+        { tag: "circle", attrs: { cx: 60, cy: 12, r: 8, fill: "#f0c96b", stroke: "#ffe8a4", "stroke-width": 2 } },
+        { tag: "circle", attrs: { cx: 48, cy: 34, r: 6, fill: "#d9a9ff" } },
+        { tag: "circle", attrs: { cx: 72, cy: 34, r: 6, fill: "#d9a9ff" } },
+        { tag: "circle", attrs: { cx: 36, cy: 56, r: 6, fill: "#d9a9ff" } },
+        { tag: "circle", attrs: { cx: 60, cy: 56, r: 6, fill: "#d9a9ff" } },
+        { tag: "circle", attrs: { cx: 84, cy: 56, r: 6, fill: "#d9a9ff" } },
+        { tag: "rect", attrs: { x: 24, y: 72, width: 22, height: 16, rx: 4, fill: "#f0c96b" } },
+        { tag: "rect", attrs: { x: 49, y: 72, width: 22, height: 16, rx: 4, fill: "#39284e", stroke: "#d9a9ff", "stroke-width": 2 } },
+        { tag: "rect", attrs: { x: 74, y: 72, width: 22, height: 16, rx: 4, fill: "#f0c96b" } }
+      ],
+      chicken: [
+        { tag: "ellipse", attrs: { cx: 56, cy: 60, rx: 30, ry: 24, fill: "#f5f0e8", stroke: "#f0c96b", "stroke-width": 3 } },
+        { tag: "circle", attrs: { cx: 86, cy: 34, r: 14, fill: "#f5f0e8", stroke: "#f0c96b", "stroke-width": 3 } },
+        { tag: "circle", attrs: { cx: 80, cy: 17, r: 4.5, fill: "#ba4c72" } },
+        { tag: "circle", attrs: { cx: 87, cy: 15, r: 4.5, fill: "#ba4c72" } },
+        { tag: "path", attrs: { d: "M99 31l11 4-11 5Z", fill: "#e3ae4d" } },
+        { tag: "circle", attrs: { cx: 88, cy: 32, r: 2.5, fill: "#241a08" } },
+        { tag: "path", attrs: { d: "M48 82v10M64 82v10", stroke: "#e3ae4d", "stroke-width": 4, "stroke-linecap": "round" } }
       ],
       coin: [
         { tag: "circle", attrs: { cx: 60, cy: 48, r: 36, fill: "#e3ae4d", stroke: "#ffe8a4", "stroke-width": 4 } },

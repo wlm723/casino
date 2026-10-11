@@ -75,10 +75,12 @@ function limit(req, res, next) {
 async function checkLimit(req, res, next) {
   const now = Date.now();
   if (memoryLimitExceeded(req.ip, now)) {
+    console.warn(`Auth rate-limited (memory): ip=${req.ip} path=${req.path}`);
     return res.status(429).json({ error: "Too many attempts. Try again later." });
   }
   try {
     if (await sharedLimitExceeded(req.ip, now)) {
+      console.warn(`Auth rate-limited (shared): ip=${req.ip} path=${req.path}`);
       return res.status(429).json({ error: "Too many attempts. Try again later." });
     }
   } catch (error) {
@@ -159,7 +161,10 @@ app.post("/api/login", limit, asyncRoute(async (req, res) => {
   } catch (error) {
     ok = false; // malformed stored hash: treat as wrong password, not a crash
   }
-  if (!user || !ok) return res.status(401).json({ error: "Wrong username or password" });
+  if (!user || !ok) {
+    console.warn(`Auth failed: login username="${username}" ip=${req.ip}`);
+    return res.status(401).json({ error: "Wrong username or password" });
+  }
 
   const token = crypto.randomBytes(32).toString("hex");
   await database.query(
@@ -206,10 +211,21 @@ app.get("/api/me", authenticate, (req, res) => {
   res.json({ username: req.user.username, balanceCents: safeCents(req.user.balance_cents) });
 });
 
+function logShortfall(req, wagerCents) {
+  // Fire-and-forget diagnostic for 409s: records what the ledger actually held.
+  database.query("SELECT balance_cents FROM users WHERE id = $1", [req.user.id]).then(
+    ({ rows }) => console.warn(
+      `Insufficient balance: user=${req.user.username} bet=${wagerCents} ` +
+      `have=${rows[0] ? rows[0].balance_cents : "unknown"} ip=${req.ip}`
+    ),
+    () => {}
+  );
+}
+
 app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
   const { mode, rows, wagerCents } = req.body || {};
   if (!["fixed", "luck"].includes(mode)) {
-    return res.status(400).json({ error: "Choose a valid Pick a Box mode." });
+    return res.status(400).json({ error: "Couldn't start that round. Please try again." });
   }
   if (!Number.isInteger(rows) || rows < 2 || rows > 8) {
     return res.status(400).json({ error: "Rows must be a whole number from 2 to 8." });
@@ -218,6 +234,8 @@ app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
     return res.status(400).json({ error: "Bet must be between €0.10 and €100.00." });
   }
 
+  const now = Date.now();
+  const id = crypto.randomUUID();
   const safeColumns = Array.from({ length: rows }, (_, row) => {
     if (mode === "fixed") return row === rows - 1 ? null : -1;
     const columns = Array.from({ length: 2 * (row + 1) }, (_, column) => column);
@@ -227,8 +245,6 @@ app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
     }
     return columns.slice(0, columns.length / 2);
   });
-  const now = Date.now();
-  const id = crypto.randomUUID();
 
   const { rows: createdRows } = await database.query(
     `WITH debited AS (
@@ -256,6 +272,7 @@ app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
     [req.user.id, wagerCents, id, mode, rows, rows - 1, now, JSON.stringify(safeColumns)]
   );
   if (!createdRows[0]) {
+    logShortfall(req, wagerCents);
     return res.status(409).json({ error: "Insufficient balance for that bet." });
   }
   res.status(201).json({
@@ -374,6 +391,312 @@ app.post("/api/pickbox/rounds/:roundId/cashout", authenticate, asyncRoute(async 
   res.json({
     status: "cashed_out",
     safeColumns: round.safe_columns,
+    balanceCents: safeCents(updatedRows[0].balance_cents)
+  });
+}));
+
+const CHICKEN_MIN_LANES = 5;
+const CHICKEN_MAX_LANES = 10;
+// Per-difficulty crash chance and payout ladder. Lane 0 stays below 1x in
+// every ladder: the first crossing never returns the full stake.
+// Generous ladders (virtual euros only).
+const CHICKEN_DIFFICULTIES = {
+  easy:     { crashPercent: 30, multipliers: [0.95, 1.08, 1.2, 1.35, 1.55, 1.8, 2.1, 2.5, 3.0, 3.6] },
+  medium:   { crashPercent: 50, multipliers: [0.9, 1.15, 1.45, 1.85, 2.4, 3.1, 4.0, 5.2, 6.8, 9.0] },
+  hard:     { crashPercent: 65, multipliers: [0.8, 1.3, 1.9, 2.8, 4.2, 6.3, 9.5, 14, 21, 32] },
+  hardcore: { crashPercent: 80, multipliers: [0.7, 1.5, 2.8, 5, 9, 16, 28, 50, 90, 160] },
+};
+const chickenLadder = (difficulty) => (
+  (CHICKEN_DIFFICULTIES[difficulty] || CHICKEN_DIFFICULTIES.medium).multipliers
+);
+const chickenMultiplierForStep = (difficulty, step) => {
+  const mult = chickenLadder(difficulty)[step];
+  return typeof mult === "number" && mult > 0 ? mult : 0;
+};
+
+app.post("/api/chicken/rounds", authenticate, asyncRoute(async (req, res) => {
+  const { mode, difficulty, lanes, wagerCents } = req.body || {};
+  if (!["fixed", "luck"].includes(mode)) {
+    return res.status(400).json({ error: "Couldn't start that round. Please try again." });
+  }
+  if (!Object.prototype.hasOwnProperty.call(CHICKEN_DIFFICULTIES, difficulty)) {
+    return res.status(400).json({ error: "Choose a valid difficulty." });
+  }
+  if (!Number.isInteger(lanes) || lanes < CHICKEN_MIN_LANES || lanes > CHICKEN_MAX_LANES) {
+    return res.status(400).json({ error: "Lanes must be a whole number from 5 to 10." });
+  }
+  if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > MAX_WAGER_CENTS) {
+    return res.status(400).json({ error: "Bet must be between €0.10 and €100.00." });
+  }
+
+  const crashPercent = CHICKEN_DIFFICULTIES[difficulty].crashPercent;
+  const laneSafe = mode === "fixed"
+    ? Array.from({ length: lanes }, (_, lane) => lane === 0)
+    : Array.from({ length: lanes }, () => crypto.randomInt(100) >= crashPercent);
+  const now = Date.now();
+  const id = crypto.randomUUID();
+
+  const { rows: createdRows } = await database.query(
+    `WITH debited AS (
+       UPDATE users
+       SET balance_cents = balance_cents - $2
+       WHERE id = $1 AND balance_cents >= $2
+       RETURNING balance_cents
+     ),
+     abandoned AS (
+       UPDATE chicken_rounds
+       SET status = 'abandoned', updated_at = $6
+       WHERE user_id = $1 AND status = 'active'
+         AND EXISTS (SELECT 1 FROM debited)
+       RETURNING id
+     ),
+     created AS (
+       INSERT INTO chicken_rounds
+       (id, user_id, lane_count, current_lane, wager_cents, status, lanes, created_at, updated_at, mode, difficulty)
+       SELECT $3, $1, $4, 0, $2, 'active', $5::jsonb, $6, $6, $7, $8
+       FROM debited
+       RETURNING id
+     )
+     SELECT created.id AS round_id, debited.balance_cents
+     FROM created CROSS JOIN debited`,
+    [req.user.id, wagerCents, id, lanes, JSON.stringify(laneSafe), now, mode, difficulty]
+  );
+  if (!createdRows[0]) {
+    logShortfall(req, wagerCents);
+    return res.status(409).json({ error: "Insufficient balance for that bet." });
+  }
+  res.status(201).json({
+    roundId: createdRows[0].round_id,
+    currentLane: 0,
+    balanceCents: safeCents(createdRows[0].balance_cents),
+    difficulty,
+    multipliers: chickenLadder(difficulty).slice(0, lanes)
+  });
+}));
+
+app.post("/api/chicken/rounds/:roundId/cross", authenticate, asyncRoute(async (req, res) => {
+  const { roundId } = req.params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(roundId)) {
+    return res.status(400).json({ error: "Invalid round identifier." });
+  }
+
+  const { rows: roundRows } = await database.query(
+    `SELECT id, lane_count, current_lane, wager_cents, status, lanes, difficulty
+     FROM chicken_rounds WHERE id = $1 AND user_id = $2`,
+    [roundId, req.user.id]
+  );
+  const round = roundRows[0];
+  if (!round || round.status !== "active") {
+    return res.status(409).json({ error: "This round is no longer active. Start a new round." });
+  }
+  const lane = Number(round.current_lane);
+  if (!Number.isInteger(lane) || lane < 0 || lane >= Number(round.lane_count)) {
+    return res.status(409).json({ error: "This round is no longer active. Start a new round." });
+  }
+
+  const safe = round.lanes[lane] === true;
+  const status = safe
+    ? (lane === Number(round.lane_count) - 1 ? "won" : "active")
+    : "lost";
+  const nextLane = safe ? lane + 1 : lane;
+  const multiplier = safe ? chickenMultiplierForStep(round.difficulty, lane) : 0;
+  const payoutCents = safe ? Math.floor(Number(round.wager_cents) * multiplier) : 0;
+  const { rows: updatedRows } = await database.query(
+    `WITH changed_round AS (
+       UPDATE chicken_rounds
+       SET status = $1, current_lane = $2, updated_at = $3
+       WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_lane = $6
+       RETURNING status, current_lane
+     ),
+     credited AS (
+       UPDATE users
+       SET balance_cents = balance_cents + $7
+       WHERE id = $5 AND $8::boolean
+         AND EXISTS (SELECT 1 FROM changed_round)
+       RETURNING balance_cents
+     )
+     SELECT changed_round.status, changed_round.current_lane,
+       COALESCE(
+         (SELECT balance_cents FROM credited),
+         (SELECT balance_cents FROM users WHERE id = $5)
+       ) AS balance_cents
+     FROM changed_round`,
+    [status, nextLane, Date.now(), roundId, req.user.id, lane, payoutCents, safe]
+  );
+  if (!updatedRows[0]) {
+    return res.status(409).json({ error: "That crossing was already submitted. Please try again." });
+  }
+
+  const completed = status !== "active";
+  res.json({
+    safe,
+    status,
+    currentLane: Number(updatedRows[0].current_lane),
+    balanceCents: safeCents(updatedRows[0].balance_cents),
+    payoutCents: safeCents(payoutCents),
+    multiplier,
+    lanes: completed ? round.lanes : undefined
+  });
+}));
+
+app.post("/api/chicken/rounds/:roundId/cashout", authenticate, asyncRoute(async (req, res) => {
+  const { roundId } = req.params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(roundId)) {
+    return res.status(400).json({ error: "Invalid round identifier." });
+  }
+
+  const { rows: roundRows } = await database.query(
+    `SELECT current_lane, lane_count, status, lanes
+     FROM chicken_rounds WHERE id = $1 AND user_id = $2`,
+    [roundId, req.user.id]
+  );
+  const round = roundRows[0];
+  if (!round || round.status !== "active") {
+    return res.status(409).json({ error: "This round is no longer active. Start a new round." });
+  }
+  if (Number(round.current_lane) <= 0) {
+    return res.status(400).json({ error: "Cross at least one lane before cashing out." });
+  }
+
+  const { rows: updatedRows } = await database.query(
+    `WITH changed_round AS (
+       UPDATE chicken_rounds
+       SET status = 'cashed_out', updated_at = $1
+       WHERE id = $2 AND user_id = $3 AND status = 'active' AND current_lane = $4
+       RETURNING status
+     )
+     SELECT changed_round.status, users.balance_cents
+     FROM changed_round JOIN users ON users.id = $3`,
+    [Date.now(), roundId, req.user.id, round.current_lane]
+  );
+  if (!updatedRows[0]) {
+    return res.status(409).json({ error: "That action was already submitted. Please try again." });
+  }
+  res.json({
+    status: "cashed_out",
+    lanes: round.lanes,
+    balanceCents: safeCents(updatedRows[0].balance_cents)
+  });
+}));
+
+// Plinko: binomial board. Ball takes `rows` 50/50 bounces; slot multipliers
+// are fixed per (risk, rows). Outcome decided server-side per drop.
+const PLINKO_TABLES = {
+  low: {
+    8:  [5.6, 2.1, 1.1, 1, 0.5, 1, 1.1, 2.1, 5.6],
+    12: [10, 3, 1.6, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 1.6, 3, 10],
+    16: [16, 9, 2, 1.4, 1.4, 1.2, 1.1, 1, 0.5, 1, 1.1, 1.2, 1.4, 1.4, 2, 9, 16],
+  },
+  medium: {
+    8:  [13, 3, 1.3, 0.7, 0.4, 0.7, 1.3, 3, 13],
+    12: [33, 4, 2, 1.1, 0.6, 0.4, 0.3, 0.4, 0.6, 1.1, 2, 4, 33],
+    16: [110, 41, 10, 5, 3, 1.5, 1, 0.5, 0.3, 0.5, 1, 1.5, 3, 5, 10, 41, 110],
+  },
+  high: {
+    8:  [29, 4, 1.5, 0.3, 0.2, 0.3, 1.5, 4, 29],
+    12: [170, 24, 8.1, 2, 0.7, 0.2, 0.2, 0.2, 0.7, 2, 8.1, 24, 170],
+    16: [1000, 130, 26, 9, 4, 2, 0.2, 0.2, 0.2, 0.2, 0.2, 2, 4, 9, 26, 130, 1000],
+  },
+};
+
+app.post("/api/plinko/drop", authenticate, asyncRoute(async (req, res) => {
+  const { rows, risk, mode, wagerCents } = req.body || {};
+  if (![8, 12, 16].includes(rows)) {
+    return res.status(400).json({ error: "Rows must be 8, 12 or 16." });
+  }
+  if (!Object.prototype.hasOwnProperty.call(PLINKO_TABLES, risk)) {
+    return res.status(400).json({ error: "Choose a valid risk level." });
+  }
+  if (!["fixed", "luck"].includes(mode)) {
+    return res.status(400).json({ error: "Couldn't start that round. Please try again." });
+  }
+  if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > MAX_WAGER_CENTS) {
+    return res.status(400).json({ error: "Bet must be between €0.10 and €100.00." });
+  }
+
+  const table = PLINKO_TABLES[risk][rows];
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  let path;
+  let slot;
+  if (mode === "fixed") {
+    // Predetermined outcome: slot drawn from the losing slots only
+    // (multiplier strictly below 1x), weighted 1/multiplier and seeded by the
+    // drop id; then a matching path is shuffled with the same seed. Dark
+    // drops can never return the stake. The animation still looks real.
+    const rand = (function seeded() {
+      let state = crypto.createHash("sha256").update(id).digest().readUInt32BE(0) >>> 0;
+      return () => {
+        state |= 0; state = (state + 0x6D2B79F5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    })();
+    let total = 0;
+    const weights = table.map((mult) => {
+      const weight = mult < 1 ? 1 / mult : 0;
+      total += weight;
+      return weight;
+    });
+    if (!(total > 0)) {
+      slot = Math.floor(table.length / 2);
+    } else {
+      let roll = rand() * total;
+      slot = table.length - 1;
+      for (let index = 0; index < weights.length; index += 1) {
+        roll -= weights[index];
+        if (roll < 0) {
+          slot = index;
+          break;
+        }
+      }
+    }
+    path = Array.from({ length: rows }, (_, index) => (index < slot ? 1 : 0));
+    for (let index = path.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(rand() * (index + 1));
+      [path[index], path[swap]] = [path[swap], path[index]];
+    }
+  } else {
+    path = Array.from({ length: rows }, () => crypto.randomInt(2));
+    slot = path.reduce((sum, step) => sum + step, 0);
+  }
+  const multiplier = table[slot];
+  const payoutCents = Math.floor(wagerCents * multiplier);
+
+  const { rows: updatedRows } = await database.query(
+    `WITH debited AS (
+       UPDATE users
+       SET balance_cents = balance_cents - $2
+       WHERE id = $1 AND balance_cents >= $2
+       RETURNING balance_cents
+     ),
+     played AS (
+       INSERT INTO plinko_rounds
+       (id, user_id, row_count, risk, wager_cents, multiplier, payout_cents, created_at, mode)
+       SELECT $3, $1, $4, $5, $2, $6::numeric, $7, $8, $9
+       FROM debited
+       RETURNING id
+     ),
+     credited AS (
+       UPDATE users
+       SET balance_cents = balance_cents + $7
+       WHERE id = $1
+         AND EXISTS (SELECT 1 FROM played)
+       RETURNING balance_cents
+     )
+     SELECT (SELECT balance_cents FROM credited) AS balance_cents`,
+    [req.user.id, wagerCents, id, rows, risk, String(multiplier), payoutCents, now, mode]
+  );
+  if (!updatedRows[0] || updatedRows[0].balance_cents == null) {
+    logShortfall(req, wagerCents);
+    return res.status(409).json({ error: "Insufficient balance for that bet." });
+  }
+  res.status(201).json({
+    slot,
+    multiplier,
+    payoutCents: safeCents(payoutCents),
+    path,
     balanceCents: safeCents(updatedRows[0].balance_cents)
   });
 }));

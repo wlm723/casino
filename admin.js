@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const database = require("./database");
 
 const MAX_BALANCE_CENTS = 214748364700; // legacy 2_147_483_647 chips * 100 cents
+const START_BALANCE_CENTS = 10000; // matches server.js: new accounts start at €100
 const [command, username, argument] = process.argv.slice(2);
 
 function parseEurosToCents(value) {
@@ -47,10 +48,13 @@ async function getUser(name) {
 function showUsage() {
   console.log(`Usage: node admin.js <command>
 
-  list                       all users and balances
-  show <user>                one user's balance and sessions
+  list                       all users: balance, sessions, joined
+  show <user>                balance, sessions and live game rounds
   give <user> <euros>        add euros (negative removes, e.g. -5.50)
   set <user> <euros>         set exact balance in euros (e.g. 100.00)
+  bonus <user> [euros]       top up to euros (default 100.00), never lowers
+  bonus --all [euros]        top up every broke account to euros
+  economy                    totals: users, euros in circulation, activity
   passwd <user> <newpass>    reset a password (logs them out)
   kick <user>                end all their sessions
   delete <user> --yes        permanently remove an account
@@ -62,24 +66,44 @@ Use the Neon console to manage database backups.`);
 async function run() {
   switch (command) {
     case "list": {
+      const now = Date.now();
       const { rows } = await database.query(
-        "SELECT username, balance_cents, created_at FROM users ORDER BY balance_cents DESC"
+        `SELECT u.username, u.balance_cents, u.created_at,
+          COUNT(s.token_hash) FILTER (WHERE s.expires_at > $1)::int AS sessions
+         FROM users u LEFT JOIN sessions s ON s.user_id = u.id
+         GROUP BY u.id ORDER BY u.balance_cents DESC`,
+        [now]
       );
       rows.forEach((user) => {
         const joined = new Date(Number(user.created_at)).toISOString().slice(0, 10);
         const balance = formatCents(toCents(user.balance_cents));
-        console.log(`${user.username.padEnd(20)} ${balance.padStart(12)}  joined ${joined}`);
+        console.log(`${user.username.padEnd(20)} ${balance.padStart(12)}  ${String(user.sessions).padStart(3)} session(s)  joined ${joined}`);
       });
       console.log(`${rows.length} user(s)`);
       return;
     }
     case "show": {
       const user = await getUser(username);
-      const { rows } = await database.query(
-        "SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = $1 AND expires_at > $2",
-        [user.id, Date.now()]
+      const [sessions, pickbox, chicken] = await Promise.all([
+        database.query(
+          "SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = $1 AND expires_at > $2",
+          [user.id, Date.now()]
+        ),
+        database.query(
+          "SELECT COUNT(*)::int AS count FROM pickbox_rounds WHERE user_id = $1 AND status = 'active'",
+          [user.id]
+        ),
+        database.query(
+          "SELECT COUNT(*)::int AS count FROM chicken_rounds WHERE user_id = $1 AND status = 'active'",
+          [user.id]
+        ),
+      ]);
+      console.log(
+        `${user.username}: ${formatCents(user.balance_cents)}, ` +
+        `${sessions.rows[0].count} active session(s), ` +
+        `${pickbox.rows[0].count} live Pick-a-Box round(s), ` +
+        `${chicken.rows[0].count} live Chicken round(s)`
       );
-      console.log(`${user.username}: ${formatCents(user.balance_cents)}, ${rows[0].count} active session(s)`);
       return;
     }
     case "give": {
@@ -89,6 +113,47 @@ async function run() {
       if (balance > MAX_BALANCE_CENTS) throw new Error(`Balance cannot exceed ${formatCents(MAX_BALANCE_CENTS)}.`);
       await database.query("UPDATE users SET balance_cents = $1 WHERE id = $2", [balance, user.id]);
       console.log(`${user.username}: ${formatCents(user.balance_cents)} -> ${formatCents(balance)}`);
+      return;
+    }
+    case "bonus": {
+      if (!username) throw new Error("Usage: node admin.js bonus <user> [euros] or bonus --all [euros].");
+      const target = argument === undefined ? START_BALANCE_CENTS : parseEurosToCents(argument);
+      if (target < 0) throw new Error("Bonus target can't be negative.");
+      if (target > MAX_BALANCE_CENTS) throw new Error(`Bonus target cannot exceed ${formatCents(MAX_BALANCE_CENTS)}.`);
+      if (username === "--all") {
+        const { rows } = await database.query(
+          "SELECT id, username, balance_cents FROM users WHERE balance_cents < $1",
+          [target]
+        );
+        for (const user of rows) {
+          await database.query("UPDATE users SET balance_cents = $1 WHERE id = $2", [target, user.id]);
+        }
+        console.log(`Topped up ${rows.length} account(s) to ${formatCents(target)}.`);
+        return;
+      }
+      const user = await getUser(username);
+      if (user.balance_cents >= target) {
+        console.log(`${user.username} already has ${formatCents(user.balance_cents)} (target ${formatCents(target)}). No change.`);
+        return;
+      }
+      await database.query("UPDATE users SET balance_cents = $1 WHERE id = $2", [target, user.id]);
+      console.log(`${user.username}: ${formatCents(user.balance_cents)} -> ${formatCents(target)}`);
+      return;
+    }
+    case "economy": {
+      const now = Date.now();
+      const [users, sessions, pickbox, chicken] = await Promise.all([
+        database.query("SELECT COUNT(*)::int AS count, COALESCE(SUM(balance_cents), 0) AS total FROM users"),
+        database.query("SELECT COUNT(*)::int AS count FROM sessions WHERE expires_at > $1", [now]),
+        database.query("SELECT COUNT(*)::int AS count FROM pickbox_rounds WHERE status = 'active'"),
+        database.query("SELECT COUNT(*)::int AS count FROM chicken_rounds WHERE status = 'active'"),
+      ]);
+      console.log(
+        `${users.rows[0].count} user(s), ${formatCents(toCents(users.rows[0].total))} in circulation, ` +
+        `${sessions.rows[0].count} active session(s), ` +
+        `${pickbox.rows[0].count} live Pick-a-Box round(s), ` +
+        `${chicken.rows[0].count} live Chicken round(s)`
+      );
       return;
     }
     case "set": {
