@@ -21,7 +21,6 @@ const multiplierForStep = (step) => (
 );
 const SESSION_SHORT_MS = 24 * 3600 * 1000; // default: browser session, 24h server expiry
 const SESSION_LONG_MS = 30 * 24 * 3600 * 1000; // "keep me logged in": 30 days
-const TICKET_MS = 5 * 60 * 1000; // second-factor ticket lifetime
 const PORT = process.env.PORT || 3000;
 
 const app = express();
@@ -70,7 +69,6 @@ function maybeCleanup(now) {
   // Fire-and-forget: works on long-running servers and opportunistically on serverless.
   database.query("DELETE FROM sessions WHERE expires_at <= $1", [now]).catch(() => {});
   database.query("DELETE FROM auth_attempts WHERE window_start <= $1", [now - RATE_WINDOW_MS]).catch(() => {});
-  database.query("DELETE FROM login_tickets WHERE expires_at <= $1", [now]).catch(() => {});
   database.query("DELETE FROM server_logs WHERE created_at <= $1", [now - 7 * 24 * 3600 * 1000]).catch(() => {});
 }
 // Persistent server log: mirrors to stdout (Vercel picks it up) and stores in
@@ -169,7 +167,7 @@ app.post("/api/signup", limit, asyncRoute(async (req, res) => {
 app.post("/api/login", limit, asyncRoute(async (req, res) => {
   const { username, password, remember } = req.body || {};
   const result = validUser(username)
-    ? await database.query("SELECT id, username, pass_hash, balance_cents, totp_enabled FROM users WHERE LOWER(username) = LOWER($1)", [username])
+    ? await database.query("SELECT id, username, pass_hash, balance_cents FROM users WHERE LOWER(username) = LOWER($1)", [username])
     : { rows: [] };
   const user = result.rows[0];
   let ok = false;
@@ -195,7 +193,7 @@ async function authenticate(req, res, next) {
     const tokenHash = sha(match[1]);
     const now = Date.now();
     const { rows } = await database.query(
-      `SELECT u.id, u.username, u.balance_cents, u.totp_enabled, s.expires_at, s.persistent FROM sessions s
+      `SELECT u.id, u.username, u.balance_cents, s.expires_at, s.persistent FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = $1 AND s.expires_at > $2`,
       [tokenHash, now]
@@ -223,11 +221,7 @@ app.post("/api/logout", authenticate, asyncRoute(async (req, res) => {
 }));
 
 app.get("/api/me", authenticate, (req, res) => {
-  res.json({
-    username: req.user.username,
-    balanceCents: safeCents(req.user.balance_cents),
-    twoFactorEnabled: Number(req.user.totp_enabled) === 1
-  });
+  res.json({ username: req.user.username, balanceCents: safeCents(req.user.balance_cents) });
 });
 
 async function listSessions(userId) {

@@ -693,11 +693,6 @@
       actionButton.innerHTML = `CASH OUT<small id="cashout-amount">€0.00</small>`;
     }
 
-    function cashoutAmount() {
-      const m = Math.floor(multAt(Date.now() - startedAt) * 100) / 100;
-      return Math.floor(wagerCents * m);
-    }
-
     function tick() {
       if (!flying) return;
       const elapsed = Date.now() - startedAt;
