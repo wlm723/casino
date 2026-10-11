@@ -75,26 +75,29 @@
       width: 100%;
       align-items: center;
       justify-content: center;
-      gap: 30px;
+      gap: 24px;
       margin: auto 0;
     }
 
+    .layout > .game { flex: 0 1 auto; min-width: 0; }
+
     .side-art {
       display: none;
+      flex: 0 0 auto;
       flex-direction: column;
-      gap: 30px;
+      gap: 26px;
     }
 
     .medallion {
       display: grid;
-      width: 112px;
-      height: 112px;
+      width: 96px;
+      height: 96px;
       place-items: center;
       border: 1px solid rgba(240, 201, 107, .4);
       border-radius: 50%;
       background: radial-gradient(circle at 35% 30%, rgba(88, 57, 111, .9), rgba(22, 16, 34, .9));
       box-shadow: 0 0 30px rgba(169, 119, 213, .18), inset 0 1px 0 rgba(255, 255, 255, .1);
-      font-size: 3.2rem;
+      font-size: 2.6rem;
       animation: floaty 5.5s ease-in-out infinite;
     }
 
@@ -112,7 +115,7 @@
       box-shadow: 0 0 30px rgba(169, 119, 213, .2);
     }
 
-    @media (min-width: 1500px) {
+    @media (min-width: 1280px) {
       .side-art { display: flex; }
     }
 
@@ -528,7 +531,7 @@
   <div class="layout">
     <aside class="side-art" aria-hidden="true">
       <div class="medallion">🐔</div>
-      <div class="medallion">🛣️</div>
+      <div class="medallion">🏁</div>
       <div class="medallion">🏆</div>
     </aside>
     <main class="game">
