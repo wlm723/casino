@@ -892,6 +892,33 @@ app.get("/api/aviator/recent", authenticate, asyncRoute(async (req, res) => {
   res.json(rows.map((row) => ({ crash: Number(row.crash_point) })));
 }));
 
+app.get("/api/aviator/live", authenticate, asyncRoute(async (req, res) => {
+  const now = Date.now();
+  const [settled, active] = await Promise.all([
+    database.query(
+      `SELECT u.username, a.wager_cents, a.cashout_mult, a.payout_cents, a.status
+       FROM aviator_rounds a JOIN users u ON u.id = a.user_id
+       WHERE a.created_at > $1 AND a.status IN ('cashed_out', 'lost')
+       ORDER BY a.created_at DESC LIMIT 15`,
+      [now - 5 * 60 * 1000]
+    ),
+    database.query(
+      "SELECT COUNT(*)::int AS count FROM aviator_rounds WHERE status = 'active' AND created_at > $1",
+      [now - 120000]
+    ),
+  ]);
+  res.json({
+    flying: active.rows[0].count,
+    bets: settled.rows.map((row) => ({
+      username: row.username,
+      wagerCents: Number(row.wager_cents),
+      cashMult: row.cashout_mult == null ? null : Number(row.cashout_mult),
+      payoutCents: Number(row.payout_cents),
+      won: row.status === "cashed_out"
+    }))
+  });
+}));
+
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
   if (error.type === "entity.parse.failed") {

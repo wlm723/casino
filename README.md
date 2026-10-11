@@ -13,7 +13,7 @@ Account and session data are stored in Neon Postgres.
 The server creates the required tables and indexes on the first database request.
 Existing accounts in a local SQLite database are not copied automatically; the Neon database starts with no accounts.
 
-Pick a Box uses one combined theme-and-mode switch: light theme selects Luck mode, while dark theme selects Fixed outcomes. Payout ladders are server-authoritative and start below the stake: Pick a Box rows 1-8 pay ×0.8, ×1.5, ×2.5, ×5, ×10, ×20, ×40, ×100. Chicken Road has Easy/Medium/Hard/Hardcore difficulties (30/50/65/80% crash per lane) with ladders up to ×3.6, ×9.0, ×32 and ×160 on lane 10. Plinko drops one ball down 8, 12 or 16 rows of 50/50 pegs into multiplier slots (Low/Medium/High risk, edges up to ×1000 on 16-row High). Aviator climbs at 6%/sec from ×1.00 with a server-sealed crash point (3% instant bust, capped ×500); cash-outs resolve against server time.
+Pick a Box uses one combined theme-and-mode switch: light theme selects Luck mode, while dark theme selects Fixed outcomes. Payout ladders are server-authoritative and start below the stake: Pick a Box rows 1-8 pay ×0.8, ×1.5, ×2.5, ×5, ×10, ×20, ×40, ×100. Chicken Road has Easy/Medium/Hard/Hardcore difficulties (30/50/65/80% crash per lane) with ladders up to ×3.6, ×9.0, ×32 and ×160 on lane 10. Plinko drops one ball down 8, 12 or 16 rows of 50/50 pegs into multiplier slots (Low/Medium/High risk, edges up to ×1000 on 16-row High). Aviator climbs at 6%/sec from ×1.00 with a server-sealed crash point (3% instant bust, capped ×500); cash-outs resolve against server time. Includes a live bets feed, recent crash strip, and optional auto cash-out at a chosen multiplier.
 
 ## Deploy to Vercel
 
