@@ -505,10 +505,10 @@
       </label>
       <div class="setting">
         <span id="wager-label">Bet amount (€)</span>
-        <input id="wager" name="wager" type="hidden" value="10.00">
+        <input id="wager" name="wager" type="hidden" value="0.10">
         <div class="bet-stepper" role="group" aria-labelledby="wager-label">
           <button class="step-btn" id="bet-down" type="button" aria-label="Decrease bet by €0.10">−</button>
-          <output class="bet-display" id="wager-display" aria-live="polite">€10.00</output>
+          <output class="bet-display" id="wager-display" aria-live="polite">€0.10</output>
           <button class="step-btn" id="bet-up" type="button" aria-label="Increase bet by €0.10">+</button>
         </div>
       </div>
@@ -543,7 +543,7 @@
 
   <script>
     const DEFAULT_ROWS = 4;
-    const DEFAULT_WAGER = 10;
+    const DEFAULT_WAGER_CENTS = 10; // €0.10 starting bet
     const MIN_WAGER_CENTS = 10;
     const settingsForm = document.querySelector("#settings");
     const rowCountInput = document.querySelector("#row-count");
@@ -561,7 +561,7 @@
     const presetButtons = [...settingsForm.querySelectorAll("[data-preset], #bet-min, #bet-max, #bet-down, #bet-up")];
 
     let rows = DEFAULT_ROWS;
-    let wagerCents = DEFAULT_WAGER * 100;
+    let wagerCents = DEFAULT_WAGER_CENTS;
     let balanceCents = 0;
     let roundComplete = false;
     let roundBusy = false;
@@ -1003,7 +1003,7 @@
     cashOutButton.addEventListener("click", () => void cashOut());
     playAgainButton.addEventListener("click", () => void startRound());
     rowCountInput.value = DEFAULT_ROWS;
-    wagerInput.value = "10.00";
+    wagerInput.value = "0.10";
 
     async function initialize() {
       if (window.location.protocol === "file:") {
