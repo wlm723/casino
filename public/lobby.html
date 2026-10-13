@@ -58,23 +58,78 @@
       line-height: 1.5;
     }
 
-    /* Menu: a top bar on phones, a fixed left sidebar from 1000px up. */
-    :root { --rail: 252px; }
+    /* Menu: slim top app bar + slide-in drawer on every screen size. */
+    :root { --rail: 264px; }
 
-    .sidebar {
+    .appbar {
       position: sticky;
-      z-index: 4;
+      z-index: 20;
       top: 0;
       display: flex;
-      min-height: 76px;
-      flex-wrap: wrap;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
+      min-height: 64px;
       border-bottom: 1px solid var(--line);
       background: rgba(16, 11, 28, .88);
       backdrop-filter: blur(18px);
-      padding: 12px 24px;
+      padding: 10px 16px;
     }
+
+    .menu-button {
+      display: inline-flex;
+      min-width: 44px;
+      min-height: 44px;
+      align-items: center;
+      justify-content: center;
+      padding: 0 12px;
+      border: 1px solid rgba(240, 201, 107, .55);
+      border-radius: 12px;
+      background: rgba(240, 201, 107, .1);
+      color: var(--gold-light);
+      cursor: pointer;
+      font-size: 1.15rem;
+      font-weight: 800;
+      line-height: 1;
+      transition: background .18s ease, transform .18s ease;
+    }
+
+    .menu-button:hover { background: rgba(240, 201, 107, .2); }
+    .menu-button:active { transform: scale(.95); }
+
+    .scrim {
+      position: fixed;
+      z-index: 28;
+      inset: 0;
+      border: 0;
+      background: rgba(5, 3, 10, .6);
+      opacity: 1;
+      transition: opacity .25s ease;
+    }
+
+    .scrim[hidden] { display: none; }
+
+    .sidebar {
+      position: fixed;
+      z-index: 30;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      display: flex;
+      width: min(var(--rail), 86vw);
+      flex-direction: column;
+      align-items: stretch;
+      gap: 14px;
+      overflow-y: auto;
+      border-right: 1px solid var(--line);
+      background: rgba(16, 11, 28, .97);
+      backdrop-filter: blur(24px);
+      padding: 20px 16px;
+      transform: translateX(-105%);
+      transition: transform .28s ease;
+    }
+
+    body[data-nav="open"] .sidebar { transform: none; }
+    body[data-nav="open"] { overflow: hidden; }
 
     .brand {
       display: inline-flex;
@@ -108,25 +163,63 @@
       white-space: nowrap;
     }
 
-    .sidebar-foot {
+    .side-head {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 10px;
-      margin-left: auto;
+    }
+
+    .side-close {
+      display: inline-flex;
+      min-width: 40px;
+      min-height: 40px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .035);
+      color: #e5deed;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    .side-close:hover {
+      border-color: rgba(240, 201, 107, .55);
+      background: rgba(240, 201, 107, .09);
+    }
+
+    .side-label {
+      display: block;
+      margin: 4px 10px;
+      color: var(--muted);
+      font-size: .68rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
     }
 
     .side-nav {
       display: flex;
-      width: 100%;
-      order: 5;
+      flex-direction: column;
       gap: 6px;
-      overflow-x: auto;
-      scrollbar-width: thin;
+    }
+
+    .sidebar-foot {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
     }
 
     .nav-item {
       display: flex;
-      min-height: 40px;
+      width: 100%;
+      min-height: 44px;
       align-items: center;
       gap: 9px;
       padding: 0 12px;
@@ -153,6 +246,10 @@
     }
 
     .nav-icon { width: 18px; color: var(--gold); font-size: .95rem; text-align: center; }
+
+    .sidebar-foot .balance-pill { justify-content: center; }
+    .sidebar-foot .username { max-width: none; text-align: center; }
+    .sidebar-foot .utility-button, .sidebar-foot .logout-button { width: 100%; }
 
     .balance-pill {
       display: flex;
@@ -220,7 +317,13 @@
         radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 42%),
         #f4eff8;
     }
-    [data-theme="light"] .sidebar { background: rgba(255, 255, 255, .88); }
+    [data-theme="light"] .sidebar { background: rgba(255, 255, 255, .97); }
+    [data-theme="light"] .appbar { background: rgba(255, 255, 255, .88); }
+    [data-theme="light"] .menu-button {
+      background: rgba(128, 91, 29, .1);
+      color: #805b1d;
+    }
+    [data-theme="light"] .side-close { background: #fff; color: #49345a; }
     [data-theme="light"] .brand-name,
     [data-theme="light"] .section-heading h2,
     [data-theme="light"] .panel h2,
@@ -657,62 +760,12 @@
     }
 
     @media (min-width: 1000px) {
-      body { display: flex; align-items: stretch; }
-      .sidebar {
-        position: fixed;
-        z-index: 10;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        width: var(--rail);
-        flex-direction: column;
-        align-items: stretch;
-        justify-content: flex-start;
-        gap: 16px;
-        border-right: 1px solid var(--line);
-        border-bottom: none;
-        padding: 24px 18px;
-        backdrop-filter: blur(24px);
-      }
-      .brand { margin-bottom: 6px; }
-      .side-nav {
-        order: unset;
-        flex-direction: column;
-        overflow: visible;
-      }
-      .side-label {
-        display: block;
-        margin: 12px 10px 4px;
-        color: var(--muted);
-        font-size: .68rem;
-        font-weight: 800;
-        letter-spacing: .08em;
-        text-transform: uppercase;
-      }
-      .nav-item { width: 100%; min-height: 42px; }
-      .sidebar-foot {
-        width: 100%;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        margin-top: auto;
-        margin-left: 0;
-        padding-top: 14px;
-        border-top: 1px solid var(--line);
-      }
-      .balance-pill { justify-content: center; width: 100%; }
-      .username { display: block; text-align: center; max-width: none; }
-      .utility-button, .logout-button { width: 100%; justify-content: center; }
-      .page-shell {
-        width: calc(100% - var(--rail));
-        max-width: 1280px;
-        margin: 0 0 0 var(--rail);
-        padding: 36px 36px 0;
-      }
-      .site-footer {
-        width: calc(100% - var(--rail));
-        margin-left: var(--rail);
-      }
+      :root { --rail: 280px; }
+      .page-shell { padding: 36px 36px 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sidebar, .scrim { transition: none; }
     }
 
     @media (min-width: 620px) {
@@ -724,13 +777,32 @@
       .lobby-panels { grid-template-columns: 1fr; }
     }
 
+    /* Phones: compact 2-column game grid. */
+    @media (max-width: 619px) {
+      .game-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .game-tile { min-height: 0; }
+      .tile-art { min-height: 108px; }
+      .tile-art svg { width: 84px; height: 70px; }
+      .tile-copy { padding: 12px 12px 14px; }
+      .tile-copy h3 { font-size: 1rem; }
+      .tile-copy p {
+        min-height: 0;
+        margin: 6px 0 12px;
+        font-size: .78rem;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .game-category { font-size: .6rem; }
+      .play-button { min-height: 42px; padding: 0 12px; font-size: .8rem; }
+    }
+
     @media (max-width: 700px) {
-      .sidebar { padding: 10px 14px; gap: 8px; }
+      .appbar { min-height: 58px; padding: 8px 12px; gap: 10px; }
       .brand { gap: 8px; }
       .brand-mark { width: 38px; height: 38px; border-radius: 12px; }
       .brand-name { font-size: 1rem; }
-      .side-nav { gap: 4px; }
-      .nav-item { min-height: 36px; padding: 0 10px; font-size: .8rem; }
       .balance-pill { min-height: 38px; padding: 0 10px; font-size: .82rem; }
       .username { max-width: 100px; font-size: .82rem; }
       .utility-button, .logout-button { min-height: 44px; padding: 0 10px; font-size: .8rem; }
@@ -744,7 +816,8 @@
       .balance-pill { gap: 5px; padding: 0 8px; }
       .username { max-width: 74px; }
       .mute-label { display: none; }
-      .game-tile { min-height: 290px; }
+      .game-grid { gap: 10px; }
+      .tile-art { min-height: 92px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -760,7 +833,8 @@
 <body>
   <p class="status-banner" id="app-status" role="alert" aria-live="polite" hidden></p>
 
-  <nav class="sidebar" id="sidebar" aria-label="Main navigation" hidden>
+  <header class="appbar">
+    <button class="menu-button" id="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">☰</button>
     <a class="brand" href="/lobby.html" aria-label="TAX Casino lobby">
       <span class="brand-mark" aria-hidden="true">
         <svg viewBox="0 0 32 32" fill="none">
@@ -771,16 +845,33 @@
       </span>
       <span class="brand-name">TAX Casino</span>
     </a>
-    <nav class="side-nav" aria-label="Primary links">
+  </header>
+
+  <div class="scrim" id="scrim" hidden></div>
+
+  <nav class="sidebar" id="sidebar" aria-label="Main navigation" hidden>
+    <div class="side-head">
+      <a class="brand" href="/lobby.html" aria-label="TAX Casino lobby">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path d="M16 3.5 27.5 16 16 28.5 4.5 16 16 3.5Z" stroke="currentColor" stroke-width="1.8"/>
+            <path d="m16 8 7.5 8-7.5 8-7.5-8L16 8Z" fill="currentColor" opacity=".72"/>
+            <path d="m12.7 16 2.2 2.3 4.6-5" stroke="#241a08" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"/>
+          </svg>
+        </span>
+        <span class="brand-name">TAX Casino</span>
+      </a>
+      <button class="side-close" id="menu-close" type="button" aria-label="Close menu">✕</button>
+    </div>
+    <p class="side-label">Menu</p>
+    <div class="side-nav">
       <a class="nav-item" href="/lobby.html" aria-current="page">
-        <span class="nav-icon" aria-hidden="true">◆</span>
-        <span class="side-label">Lobby</span>Lobby
+        <span class="nav-icon" aria-hidden="true">▦</span>Lobby
       </a>
       <a class="nav-item" href="/account.html">
-        <span class="nav-icon" aria-hidden="true">◆</span>
-        <span class="side-label">Account</span>Account
+        <span class="nav-icon" aria-hidden="true">◈</span>Account
       </a>
-    </nav>
+    </div>
     <div class="sidebar-foot">
       <div class="balance-pill" aria-label="Account balance">
         <span class="balance-coin" aria-hidden="true">◆</span>
@@ -1004,6 +1095,9 @@
     const elements = {
       status: document.querySelector("#app-status"),
       sidebar: document.querySelector("#sidebar"),
+      scrim: document.querySelector("#scrim"),
+      menuToggle: document.querySelector("#menu-toggle"),
+      menuClose: document.querySelector("#menu-close"),
       content: document.querySelector("#lobby-content"),
       footer: document.querySelector("#site-footer"),
       username: document.querySelector("#username"),
@@ -1029,6 +1123,28 @@
     let balanceFrame = 0;
     let sessionReady = false;
     let muted = true;
+
+    // Slide-in drawer menu.
+    function setNav(open) {
+      document.body.dataset.nav = open ? "open" : "closed";
+      if (elements.menuToggle) {
+        elements.menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+        elements.menuToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+      }
+      if (elements.scrim) elements.scrim.hidden = !open;
+    }
+    document.body.dataset.nav = "closed";
+    elements.menuToggle.addEventListener("click", () => {
+      setNav(document.body.dataset.nav !== "open");
+    });
+    elements.menuClose.addEventListener("click", () => setNav(false));
+    elements.scrim.addEventListener("click", () => setNav(false));
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") setNav(false);
+    });
+    document.querySelectorAll(".nav-item").forEach((link) => {
+      link.addEventListener("click", () => setNav(false));
+    });
 
     // Global casino theme (set in Account): visual only here, no game odds.
     function readStoredTheme() {
