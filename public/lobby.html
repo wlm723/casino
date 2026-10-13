@@ -58,23 +58,21 @@
       line-height: 1.5;
     }
 
-    .topbar {
+    /* Menu: a top bar on phones, a fixed left sidebar from 1000px up. */
+    :root { --rail: 252px; }
+
+    .sidebar {
       position: sticky;
       z-index: 4;
       top: 0;
+      display: flex;
+      min-height: 76px;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
       border-bottom: 1px solid var(--line);
       background: rgba(16, 11, 28, .88);
       backdrop-filter: blur(18px);
-    }
-
-    .topbar-inner {
-      display: flex;
-      width: min(1200px, 100%);
-      min-height: 76px;
-      align-items: center;
-      justify-content: space-between;
-      gap: 18px;
-      margin: 0 auto;
       padding: 12px 24px;
     }
 
@@ -110,12 +108,51 @@
       white-space: nowrap;
     }
 
-    .top-actions {
+    .sidebar-foot {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
       gap: 10px;
+      margin-left: auto;
     }
+
+    .side-nav {
+      display: flex;
+      width: 100%;
+      order: 5;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+
+    .nav-item {
+      display: flex;
+      min-height: 40px;
+      align-items: center;
+      gap: 9px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      color: #d8d0e4;
+      font-size: .88rem;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: border-color .18s ease, background .18s ease, color .18s ease;
+    }
+
+    .nav-item:hover {
+      border-color: rgba(240, 201, 107, .55);
+      background: rgba(240, 201, 107, .09);
+      color: #fff8e9;
+    }
+
+    .nav-item[aria-current="page"] {
+      border-color: rgba(240, 201, 107, .5);
+      background: rgba(240, 201, 107, .14);
+      color: var(--gold-light);
+    }
+
+    .nav-icon { width: 18px; color: var(--gold); font-size: .95rem; text-align: center; }
 
     .balance-pill {
       display: flex;
@@ -183,7 +220,7 @@
         radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 42%),
         #f4eff8;
     }
-    [data-theme="light"] .topbar { background: rgba(255, 255, 255, .88); }
+    [data-theme="light"] .sidebar { background: rgba(255, 255, 255, .88); }
     [data-theme="light"] .brand-name,
     [data-theme="light"] .section-heading h2,
     [data-theme="light"] .panel h2,
@@ -203,6 +240,13 @@
       background: #fff;
       color: #49345a;
     }
+    [data-theme="light"] .nav-item { color: #49345a; }
+    [data-theme="light"] .nav-item:hover { background: #fff; color: #382544; }
+    [data-theme="light"] .nav-item[aria-current="page"] {
+      background: rgba(128, 91, 29, .12);
+      color: #805b1d;
+    }
+    [data-theme="light"] .side-label { color: #71667a; }
 
     .logout-button:disabled { cursor: wait; opacity: .65; }
 
@@ -612,6 +656,65 @@
       100% { transform: scale(1); color: var(--gold-light); }
     }
 
+    @media (min-width: 1000px) {
+      body { display: flex; align-items: stretch; }
+      .sidebar {
+        position: fixed;
+        z-index: 10;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: var(--rail);
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 16px;
+        border-right: 1px solid var(--line);
+        border-bottom: none;
+        padding: 24px 18px;
+        backdrop-filter: blur(24px);
+      }
+      .brand { margin-bottom: 6px; }
+      .side-nav {
+        order: unset;
+        flex-direction: column;
+        overflow: visible;
+      }
+      .side-label {
+        display: block;
+        margin: 12px 10px 4px;
+        color: var(--muted);
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+      .nav-item { width: 100%; min-height: 42px; }
+      .sidebar-foot {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        margin-top: auto;
+        margin-left: 0;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+      .balance-pill { justify-content: center; width: 100%; }
+      .username { display: block; text-align: center; max-width: none; }
+      .utility-button, .logout-button { width: 100%; justify-content: center; }
+      .page-shell {
+        width: calc(100% - var(--rail));
+        max-width: 1280px;
+        margin: 0 0 0 var(--rail);
+        padding: 36px 36px 0;
+      }
+      .site-footer {
+        width: calc(100% - var(--rail));
+        margin-left: var(--rail);
+      }
+    }
+
     @media (min-width: 620px) {
       .game-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -622,15 +725,17 @@
     }
 
     @media (max-width: 700px) {
-      .topbar-inner { gap: 9px; padding: 10px 14px; }
+      .sidebar { padding: 10px 14px; gap: 8px; }
       .brand { gap: 8px; }
       .brand-mark { width: 38px; height: 38px; border-radius: 12px; }
       .brand-name { font-size: 1rem; }
-      .top-actions { flex-wrap: wrap; gap: 6px; }
+      .side-nav { gap: 4px; }
+      .nav-item { min-height: 36px; padding: 0 10px; font-size: .8rem; }
       .balance-pill { min-height: 38px; padding: 0 10px; font-size: .82rem; }
       .username { max-width: 100px; font-size: .82rem; }
       .utility-button, .logout-button { min-height: 44px; padding: 0 10px; font-size: .8rem; }
-      .page-shell { padding: 20px 15px 0; }      .section-heading { align-items: flex-start; }
+      .page-shell { padding: 20px 15px 0; }
+      .section-heading { align-items: flex-start; }
       .footer-inner { padding-right: 15px; padding-left: 15px; }
     }
 
@@ -655,33 +760,40 @@
 <body>
   <p class="status-banner" id="app-status" role="alert" aria-live="polite" hidden></p>
 
-  <header class="topbar" id="topbar" hidden>
-    <div class="topbar-inner">
-      <a class="brand" href="/lobby.html" aria-label="TAX Casino lobby">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 32 32" fill="none">
-            <path d="M16 3.5 27.5 16 16 28.5 4.5 16 16 3.5Z" stroke="currentColor" stroke-width="1.8"/>
-            <path d="m16 8 7.5 8-7.5 8-7.5-8L16 8Z" fill="currentColor" opacity=".72"/>
-            <path d="m12.7 16 2.2 2.3 4.6-5" stroke="#241a08" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"/>
-          </svg>
-        </span>
-        <span class="brand-name">TAX Casino</span>
+  <nav class="sidebar" id="sidebar" aria-label="Main navigation" hidden>
+    <a class="brand" href="/lobby.html" aria-label="TAX Casino lobby">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none">
+          <path d="M16 3.5 27.5 16 16 28.5 4.5 16 16 3.5Z" stroke="currentColor" stroke-width="1.8"/>
+          <path d="m16 8 7.5 8-7.5 8-7.5-8L16 8Z" fill="currentColor" opacity=".72"/>
+          <path d="m12.7 16 2.2 2.3 4.6-5" stroke="#241a08" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"/>
+        </svg>
+      </span>
+      <span class="brand-name">TAX Casino</span>
+    </a>
+    <nav class="side-nav" aria-label="Primary links">
+      <a class="nav-item" href="/lobby.html" aria-current="page">
+        <span class="nav-icon" aria-hidden="true">◆</span>
+        <span class="side-label">Lobby</span>Lobby
       </a>
-      <div class="top-actions">
-        <div class="balance-pill" aria-label="Account balance">
-          <span class="balance-coin" aria-hidden="true">◆</span>
-          <span class="balance-value" id="balance-value">€0.00</span>
-        </div>
-        <a class="utility-button" href="/account.html">Account</a>
-        <span class="username" id="username"></span>
-        <button class="utility-button" id="mute-toggle" type="button" aria-pressed="true">
-          <span aria-hidden="true" id="mute-icon">◖</span>
-          <span class="mute-label" id="mute-label">Sound: Off</span>
-        </button>
-        <button class="logout-button" id="logout-button" type="button">Log out</button>
+      <a class="nav-item" href="/account.html">
+        <span class="nav-icon" aria-hidden="true">◆</span>
+        <span class="side-label">Account</span>Account
+      </a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="balance-pill" aria-label="Account balance">
+        <span class="balance-coin" aria-hidden="true">◆</span>
+        <span class="balance-value" id="balance-value">€0.00</span>
       </div>
+      <span class="username" id="username"></span>
+      <button class="utility-button" id="mute-toggle" type="button" aria-pressed="true">
+        <span aria-hidden="true" id="mute-icon">◖</span>
+        <span class="mute-label" id="mute-label">Sound: Off</span>
+      </button>
+      <button class="logout-button" id="logout-button" type="button">Log out</button>
     </div>
-  </header>
+  </nav>
 
   <main class="page-shell" id="lobby-content" hidden>
     <section class="hero" aria-labelledby="welcome-title">
@@ -891,7 +1003,7 @@
 
     const elements = {
       status: document.querySelector("#app-status"),
-      topbar: document.querySelector("#topbar"),
+      sidebar: document.querySelector("#sidebar"),
       content: document.querySelector("#lobby-content"),
       footer: document.querySelector("#site-footer"),
       username: document.querySelector("#username"),
@@ -1293,7 +1405,7 @@
         renderBalance(user.balanceCents);
         renderGames();
         await loadSessions();
-        elements.topbar.hidden = false;
+        elements.sidebar.hidden = false;
         elements.content.hidden = false;
         elements.footer.hidden = false;
         sessionReady = true;
