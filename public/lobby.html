@@ -524,6 +524,14 @@
       filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .3));
     }
 
+    .tile-art img {
+      z-index: 1;
+      display: block;
+      width: 100%;
+      height: 170px;
+      object-fit: cover;
+    }
+
     .tile-copy {
       display: flex;
       flex: 1;
@@ -783,6 +791,7 @@
       .game-tile { min-height: 0; }
       .tile-art { min-height: 108px; }
       .tile-art svg { width: 84px; height: 70px; }
+      .tile-art img { height: 110px; }
       .tile-copy { padding: 12px 12px 14px; }
       .tile-copy h3 { font-size: 1rem; }
       .tile-copy p {
@@ -818,6 +827,7 @@
       .mute-label { display: none; }
       .game-grid { gap: 10px; }
       .tile-art { min-height: 92px; }
+      .tile-art img { height: 96px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -972,6 +982,7 @@
         description: "Choose a box from the pyramid and see what you uncover.",
         category: "quick-games",
         icon: "diamond",
+        image: "/img/boxes.png",
         url: "/boxes.html",
         available: true
       },
@@ -981,6 +992,7 @@
         description: "Guide the chicken across the road, lane by lane, and cash out before the crash.",
         category: "quick-games",
         icon: "chicken",
+        image: "/img/chicken.png",
         url: "/chicken.html",
         available: true
       },
@@ -990,6 +1002,7 @@
         description: "Drop the ball down the peg board and land a multiplier slot.",
         category: "quick-games",
         icon: "plinko",
+        image: "/img/plinko.png",
         url: "/plinko.html",
         available: true
       },
@@ -999,6 +1012,7 @@
         description: "Ride the climbing multiplier and cash out before it flies away.",
         category: "quick-games",
         icon: "aviator",
+        image: "/img/aviator.png",
         url: "/aviator.html",
         available: true
       },
@@ -1463,6 +1477,25 @@
       return svg;
     }
 
+    function createArtwork(game) {
+      const artwork = document.createElement("div");
+      artwork.className = "tile-art";
+      if (game.image) {
+        const img = document.createElement("img");
+        img.src = game.image;
+        img.alt = `${game.name} artwork`;
+        img.loading = "lazy";
+        // Missing file? Fall back to the drawn SVG icon.
+        img.addEventListener("error", () => {
+          img.replaceWith(createIcon(game.icon));
+        }, { once: true });
+        artwork.append(img);
+      } else {
+        artwork.append(createIcon(game.icon));
+      }
+      return artwork;
+    }
+
     function createGameTile(game, index) {
       const tile = document.createElement("article");
       tile.className = "game-tile";
@@ -1475,9 +1508,7 @@
         tile.append(ribbon);
       }
 
-      const artwork = document.createElement("div");
-      artwork.className = "tile-art";
-      artwork.append(createIcon(game.icon));
+      const artwork = createArtwork(game);
       tile.append(artwork);
 
       const copy = document.createElement("div");
