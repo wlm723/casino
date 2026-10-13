@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100b1c">
+  <title>TAX Casino | Account & History</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f5f0e8;
+      background: #100b1c;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      --gold: #f0c96b;
+      --gold-light: #ffe8a4;
+      --muted: #aaa2b8;
+      --line: rgba(220, 190, 255, .12);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    button, a { touch-action: manipulation; font: inherit; }
+    button:focus-visible, a:focus-visible {
+      outline: 3px solid var(--gold-light);
+      outline-offset: 4px;
+    }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      min-height: 100dvh;
+      margin: 0;
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(111, 71, 161, .27), transparent 42%),
+        radial-gradient(ellipse at 95% 40%, rgba(179, 124, 48, .08), transparent 30%),
+        #100b1c;
+    }
+
+    .status-banner {
+      position: fixed;
+      z-index: 5;
+      right: 16px;
+      bottom: 16px;
+      left: 16px;
+      width: min(620px, calc(100% - 32px));
+      margin: auto;
+      padding: 15px 18px;
+      border: 1px solid rgba(255, 151, 137, .55);
+      border-radius: 14px;
+      background: #2b1520;
+      box-shadow: 0 12px 45px rgba(0, 0, 0, .4);
+      color: #ffc2b7;
+      line-height: 1.5;
+    }
+
+    .topbar {
+      position: sticky;
+      z-index: 4;
+      top: 0;
+      border-bottom: 1px solid var(--line);
+      background: rgba(16, 11, 28, .88);
+      backdrop-filter: blur(18px);
+    }
+
+    .topbar-inner {
+      display: flex;
+      width: min(1200px, 100%);
+      min-height: 76px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin: 0 auto;
+      padding: 12px 24px;
+    }
+
+    .brand {
+      display: inline-flex;
+      min-width: 0;
+      align-items: center;
+      gap: 11px;
+      color: #fff8e9;
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid rgba(240, 201, 107, .7);
+      border-radius: 14px;
+      background: linear-gradient(145deg, #4c315e, #241a35);
+      box-shadow: 0 0 24px rgba(191, 145, 78, .18), inset 0 1px rgba(255, 255, 255, .12);
+      color: var(--gold);
+    }
+
+    .brand-mark svg { width: 25px; height: 25px; }
+    .brand-name {
+      overflow: hidden;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.15rem;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .balance-pill {
+      display: flex;
+      min-height: 42px;
+      align-items: center;
+      gap: 8px;
+      padding: 0 13px;
+      border: 1px solid rgba(240, 201, 107, .34);
+      border-radius: 999px;
+      background: rgba(240, 201, 107, .08);
+      color: var(--gold-light);
+      font-size: .9rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .balance-coin { color: var(--gold); font-size: 1.05rem; }
+    .balance-value { display: inline-block; }
+
+    .username {
+      max-width: 150px;
+      overflow: hidden;
+      color: #d8d0e4;
+      font-size: .91rem;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .utility-button, .logout-button {
+      display: inline-flex;
+      min-height: 42px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 13px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .035);
+      color: #e5deed;
+      cursor: pointer;
+      font-size: .86rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: border-color .18s ease, background .18s ease, transform .18s ease;
+      white-space: nowrap;
+    }
+
+    .utility-button:hover, .logout-button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: rgba(240, 201, 107, .55);
+      background: rgba(240, 201, 107, .09);
+    }
+
+    .page-shell {
+      width: min(1200px, 100%);
+      margin: 0 auto;
+      padding: 30px 24px 40px;
+    }
+
+    .page-heading {
+      margin-bottom: 24px;
+    }
+
+    .section-kicker {
+      margin: 0 0 8px;
+      color: var(--gold);
+      font-size: .74rem;
+      font-weight: 850;
+      letter-spacing: .17em;
+      text-transform: uppercase;
+    }
+
+    .page-heading h1 {
+      margin: 0;
+      color: #fff8ed;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2rem, 5vw, 2.8rem);
+      letter-spacing: -.03em;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 16px;
+    }
+
+    .tab-btn {
+      min-height: 44px;
+      padding: 0 20px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .035);
+      color: #c9c1d3;
+      cursor: pointer;
+      font-size: .9rem;
+      font-weight: 750;
+      transition: all .18s ease;
+    }
+
+    .tab-btn:hover { border-color: rgba(240, 201, 107, .42); color: #fff4d7; }
+    .tab-btn[aria-selected="true"] {
+      border-color: rgba(240, 201, 107, .72);
+      background: rgba(240, 201, 107, .13);
+      color: var(--gold-light);
+    }
+
+    .tab-content { display: none; }
+    .tab-content[aria-hidden="false"] { display: block; }
+
+    .panels-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    @media (min-width: 900px) {
+      .panels-grid { grid-template-columns: 380px 1fr; }
+    }
+
+    .panel {
+      padding: clamp(20px, 3vw, 28px);
+      border: 1px solid var(--line);
+      border-radius: 21px;
+      background: linear-gradient(145deg, rgba(31, 24, 45, .94), rgba(23, 17, 35, .97));
+      box-shadow: 0 15px 38px rgba(0, 0, 0, .15);
+    }
+
+    .panel h2 {
+      margin: 0 0 16px;
+      color: #fff8ed;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.4rem;
+    }
+
+    .account-details {
+      display: grid;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .detail-label { color: var(--muted); font-size: .85rem; font-weight: 700; }
+    .detail-val { color: #f5f0e8; font-size: .95rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    .theme-pref-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      border: 1px solid rgba(240, 201, 107, .3);
+      border-radius: 16px;
+      background: rgba(240, 201, 107, .06);
+    }
+
+    .theme-pref-card div h3 { margin: 0 0 4px; color: #fff8ed; font-size: 1.05rem; }
+    .theme-pref-card div p { margin: 0; color: var(--muted); font-size: .82rem; }
+
+    .history-table-wrap {
+      overflow-x: auto;
+    }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+      text-align: left;
+    }
+
+    .history-table th {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--gold);
+      font-size: .78rem;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .history-table td {
+      padding: 14px;
+      border-bottom: 1px solid rgba(220, 190, 255, .06);
+      color: #ded7e7;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .history-table tr:hover td { background: rgba(255, 255, 255, .02); }
+
+    .badge {
+      display: inline-flex;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .badge.win { background: rgba(131, 226, 167, .14); color: #83e2a7; }
+    .badge.loss { background: rgba(255, 155, 136, .14); color: #ff9b88; }
+    .badge.cash { background: rgba(240, 201, 107, .14); color: var(--gold-light); }
+
+    .session-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .session-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .session-row.current-device {
+      border-color: rgba(240, 201, 107, .4);
+      background: rgba(240, 201, 107, .08);
+    }
+
+    .session-name { font-weight: 700; color: #fff8ed; }
+    .session-meta { color: var(--muted); font-size: .78rem; font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+    .revoke-button {
+      min-height: 40px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: transparent;
+      color: #ffc2b7;
+      cursor: pointer;
+      font-size: .8rem;
+      font-weight: 700;
+    }
+
+    [data-theme="light"] {
+      color-scheme: light;
+      color: #30243a;
+      background: #f4eff8;
+      --muted: #71667a;
+      --line: rgba(56, 34, 74, .14);
+    }
+    [data-theme="light"] body {
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 42%),
+        #f4eff8;
+    }
+    [data-theme="light"] .topbar {
+      background: rgba(255, 255, 255, .88);
+    }
+    [data-theme="light"] .brand-name,
+    [data-theme="light"] .panel h2,
+    [data-theme="light"] .page-heading h1,
+    [data-theme="light"] .session-name,
+    [data-theme="light"] .theme-pref-card div h3 { color: #382544; }
+    [data-theme="light"] .panel {
+      background: linear-gradient(145deg, #ffffff, #f6f0fb);
+    }
+    [data-theme="light"] .detail-row,
+    [data-theme="light"] .session-row,
+    [data-theme="light"] .tab-btn,
+    [data-theme="light"] .utility-button,
+    [data-theme="light"] .logout-button {
+      background: #fff;
+      color: #49345a;
+    }
+    [data-theme="light"] .tab-btn[aria-selected="true"] {
+      background: rgba(128, 91, 29, .1);
+      color: #805b1d;
+    }
+    [data-theme="light"] .history-table td { color: #51445b; }
+    [data-theme="light"] .detail-val { color: #30243a; }
+    [data-theme="light"] .username { color: #51445b; }
+
+    @media (max-width: 700px) {
+      .topbar-inner { padding: 10px 14px; }
+      .page-shell { padding: 20px 14px; }
+      .tabs { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <p class="status-banner" id="app-status" role="alert" aria-live="polite" hidden></p>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/lobby.html" aria-label="TAX Casino lobby">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path d="M16 3.5 27.5 16 16 28.5 4.5 16 16 3.5Z" stroke="currentColor" stroke-width="1.8"/>
+            <path d="m16 8 7.5 8-7.5 8-7.5-8L16 8Z" fill="currentColor" opacity=".72"/>
+            <path d="m12.7 16 2.2 2.3 4.6-5" stroke="#241a08" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"/>
+          </svg>
+        </span>
+        <span class="brand-name">TAX Casino</span>
+      </a>
+      <div class="top-actions">
+        <div class="balance-pill" aria-label="Account balance">
+          <span class="balance-coin" aria-hidden="true">◆</span>
+          <span class="balance-value" id="balance-value">€0.00</span>
+        </div>
+        <span class="username" id="username"></span>
+        <a class="utility-button" href="/lobby.html">Lobby</a>
+        <button class="logout-button" id="logout-button" type="button">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <p class="section-kicker">Player Dashboard</p>
+      <h1>Account & Play History</h1>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Account sections">
+      <button class="tab-btn" id="tab-account" role="tab" aria-selected="true" aria-controls="panel-account" type="button">Account & Theme</button>
+      <button class="tab-btn" id="tab-history" role="tab" aria-selected="false" aria-controls="panel-history" type="button">Play History</button>
+    </div>
+
+    <!-- Account Tab -->
+    <div class="tab-content" id="panel-account" role="tabpanel" aria-labelledby="tab-account" aria-hidden="false">
+      <div class="panels-grid">
+        <section class="panel">
+          <h2>Profile & Wallet</h2>
+          <div class="account-details">
+            <div class="detail-row">
+              <span class="detail-label">Username</span>
+              <span class="detail-val" id="profile-username">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Available Balance</span>
+              <span class="detail-val" id="profile-balance">€0.00</span>
+            </div>
+          </div>
+          <div class="theme-pref-card">
+            <div>
+              <h3>Global Light Theme</h3>
+              <p>Switch casino theme appearance</p>
+            </div>
+            <button class="utility-button" id="theme-toggle" type="button" aria-pressed="false">Dark Theme</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Active Devices & Sessions</h2>
+          <div style="margin-bottom: 14px;">
+            <button class="utility-button" id="revoke-others" type="button">Log out other devices</button>
+          </div>
+          <ul class="session-list" id="session-list" aria-live="polite">
+            <li class="session-row"><div class="session-name">Loading devices…</div></li>
+          </ul>
+        </section>
+      </div>
+    </div>
+
+    <!-- History Tab -->
+    <div class="tab-content" id="panel-history" role="tabpanel" aria-labelledby="tab-history" aria-hidden="true">
+      <section class="panel">
+        <h2>Recent Game Rounds</h2>
+        <div class="history-table-wrap">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Game</th>
+                <th>Bet</th>
+                <th>Multiplier / Outcome</th>
+                <th>Payout</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody">
+              <tr><td colspan="5" style="text-align: center; color: var(--muted);">Loading history…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const elements = {
+      status: document.querySelector("#app-status"),
+      username: document.querySelector("#username"),
+      balance: document.querySelector("#balance-value"),
+      profileUsername: document.querySelector("#profile-username"),
+      profileBalance: document.querySelector("#profile-balance"),
+      logoutButton: document.querySelector("#logout-button"),
+      themeToggle: document.querySelector("#theme-toggle"),
+      revokeOthers: document.querySelector("#revoke-others"),
+      sessionList: document.querySelector("#session-list"),
+      historyTbody: document.querySelector("#history-tbody"),
+      tabAccount: document.querySelector("#tab-account"),
+      tabHistory: document.querySelector("#tab-history"),
+      panelAccount: document.querySelector("#panel-account"),
+      panelHistory: document.querySelector("#panel-history")
+    };
+
+    const euroFormat = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
+    const formatBalance = (cents) => euroFormat.format(cents / 100);
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        credentials: "same-origin",
+        ...options,
+        headers: options.body
+          ? { "Content-Type": "application/json", ...options.headers }
+          : options.headers
+      });
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("The server returned an invalid response.");
+      }
+      if (!response.ok) {
+        const error = new Error(typeof data.error === "string" ? data.error : "Request failed.");
+        error.status = response.status;
+        throw error;
+      }
+      return data;
+    }
+
+    function showStatus(msg) {
+      elements.status.textContent = msg;
+      elements.status.hidden = !msg;
+    }
+
+    // Tabs logic
+    [elements.tabAccount, elements.tabHistory].forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const isAcc = tab === elements.tabAccount;
+        elements.tabAccount.setAttribute("aria-selected", String(isAcc));
+        elements.tabHistory.setAttribute("aria-selected", String(!isAcc));
+        elements.panelAccount.setAttribute("aria-hidden", String(!isAcc));
+        elements.panelHistory.setAttribute("aria-hidden", String(isAcc));
+      });
+    });
+
+    // Theme logic: single global key, migrated legacy per-game keys kept
+    // in sync so older open tabs follow along.
+    const THEME_KEY = "tax-global-theme";
+    const LEGACY_KEYS = ["plinko-theme", "pickbox-theme", "chicken-theme", "aviator-theme"];
+    function readStoredTheme() {
+      try {
+        return localStorage.getItem(THEME_KEY)
+          || LEGACY_KEYS.map((k) => localStorage.getItem(k)).find((t) => t === "light" || t === "dark")
+          || "dark";
+      } catch {
+        return "dark";
+      }
+    }
+    function updateTheme(theme) {
+      const normalized = theme === "light" ? "light" : "dark";
+      const isLight = normalized === "light";
+      document.documentElement.dataset.theme = normalized;
+      elements.themeToggle.setAttribute("aria-pressed", String(isLight));
+      elements.themeToggle.textContent = isLight
+        ? "Switch to dark theme"
+        : "Switch to light theme";
+      elements.themeToggle.title = isLight
+        ? "Switches to the dark theme"
+        : "Switches to the light theme";
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = isLight ? "#f4eff8" : "#100b1c";
+      try {
+        // Skip writes when nothing changed: every write fires `storage`
+        // in other open tabs, and blind rewrites cascade between them.
+        if (localStorage.getItem(THEME_KEY) !== normalized) {
+          localStorage.setItem(THEME_KEY, normalized);
+        }
+        LEGACY_KEYS.forEach((k) => {
+          if (localStorage.getItem(k) !== normalized) localStorage.setItem(k, normalized);
+        });
+      } catch {}
+    }
+
+    elements.themeToggle.addEventListener("click", () => {
+      updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+    });
+
+    try {
+      updateTheme(readStoredTheme());
+    } catch {
+      updateTheme("dark");
+    }
+    window.addEventListener("storage", (event) => {
+      if (event.key === THEME_KEY || LEGACY_KEYS.includes(event.key)) {
+        try { updateTheme(localStorage.getItem(THEME_KEY) || readStoredTheme()); } catch {}
+      }
+    });
+
+    function deviceLabel(agent) {
+      const text = String(agent || "");
+      if (/Android/i.test(text)) return "Android device";
+      if (/iPhone|iPad|iPod/i.test(text)) return "Apple device";
+      if (/Windows/i.test(text)) return "Windows device";
+      if (/Macintosh|Mac OS/i.test(text)) return "Mac";
+      return text ? "Browser session" : "Unknown device";
+    }
+
+    function formatDate(millis) {
+      try {
+        return new Date(millis).toLocaleString("en-IE", { dateStyle: "medium", timeStyle: "short" });
+      } catch {
+        return "recently";
+      }
+    }
+
+    function renderSessions(current, sessions) {
+      elements.sessionList.replaceChildren();
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        const li = document.createElement("li");
+        li.className = "session-row";
+        li.textContent = "No active devices.";
+        elements.sessionList.append(li);
+        return;
+      }
+      sessions.forEach((session) => {
+        const li = document.createElement("li");
+        li.className = "session-row";
+        const isCurrent = session.tokenHash === current;
+        if (isCurrent) li.classList.add("current-device");
+
+        const info = document.createElement("div");
+        const name = document.createElement("div");
+        name.className = "session-name";
+        name.textContent = isCurrent ? "This device (Current)" : deviceLabel(session.agent);
+        const meta = document.createElement("div");
+        meta.className = "session-meta";
+        meta.textContent = `Started ${formatDate(session.createdAt)}${session.ip ? ` · ${session.ip}` : ""}`;
+        info.append(name, meta);
+        li.append(info);
+
+        if (!isCurrent) {
+          const btn = document.createElement("button");
+          btn.className = "revoke-button";
+          btn.type = "button";
+          btn.textContent = "Log out";
+          btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            try {
+              const res = await api("/api/sessions", { method: "DELETE", body: JSON.stringify({ tokenHash: session.tokenHash }) });
+              renderSessions(res.current, res.sessions);
+            } catch (err) {
+              if (err.status === 401) { window.location.replace("/"); return; }
+              showStatus(err.message);
+              btn.disabled = false;
+            }
+          });
+          li.append(btn);
+        }
+        elements.sessionList.append(li);
+      });
+    }
+
+    async function loadSessions() {
+      try {
+        const data = await api("/api/sessions");
+        renderSessions(data.current, data.sessions);
+      } catch (err) {
+        if (err.status === 401) { window.location.replace("/"); return; }
+        showStatus(err.message);
+      }
+    }
+
+    elements.revokeOthers.addEventListener("click", async () => {
+      elements.revokeOthers.disabled = true;
+      showStatus("");
+      try {
+        const data = await api("/api/sessions", { method: "DELETE", body: JSON.stringify({ allOthers: true }) });
+        renderSessions(data.current, data.sessions);
+      } catch (err) {
+        if (err.status === 401) { window.location.replace("/"); return; }
+        showStatus(err.message);
+      } finally {
+        elements.revokeOthers.disabled = false;
+      }
+    });
+
+    function renderHistory(items) {
+      elements.historyTbody.replaceChildren();
+      if (!Array.isArray(items) || items.length === 0) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.style.cssText = "text-align: center; color: var(--muted); padding: 24px;";
+        td.textContent = "No play history yet. Play a game to see your rounds here!";
+        tr.append(td);
+        elements.historyTbody.append(tr);
+        return;
+      }
+
+      items.forEach((item) => {
+        const tr = document.createElement("tr");
+
+        const tdGame = document.createElement("td");
+        tdGame.style.fontWeight = "700";
+        tdGame.textContent = item.game;
+
+        const tdBet = document.createElement("td");
+        tdBet.textContent = formatBalance(item.wagerCents);
+
+        const tdOutcome = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.textContent = item.outcome;
+        badge.className = `badge ${item.badgeClass || (item.payoutCents > item.wagerCents ? "win" : "loss")}`;
+        tdOutcome.append(badge);
+
+        const tdPayout = document.createElement("td");
+        tdPayout.style.fontWeight = "750";
+        tdPayout.style.color = item.payoutCents > 0 ? "var(--gold-light)" : "inherit";
+        tdPayout.textContent = formatBalance(item.payoutCents);
+
+        const tdTime = document.createElement("td");
+        tdTime.style.color = "var(--muted)";
+        tdTime.style.fontSize = ".82rem";
+        tdTime.textContent = formatDate(item.createdAt);
+
+        tr.append(tdGame, tdBet, tdOutcome, tdPayout, tdTime);
+        elements.historyTbody.append(tr);
+      });
+    }
+
+    async function loadHistory() {
+      try {
+        const data = await api("/api/history");
+        renderHistory(data.history);
+      } catch (err) {
+        if (err.status === 401) { window.location.replace("/"); return; }
+        elements.historyTbody.replaceChildren();
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.style.cssText = "text-align: center; color: #ff9b88; padding: 24px;";
+        td.textContent = err.message;
+        tr.append(td);
+        elements.historyTbody.append(tr);
+      }
+    }
+
+    elements.logoutButton.addEventListener("click", async () => {
+      elements.logoutButton.disabled = true;
+      showStatus("");
+      try {
+        await api("/api/logout", { method: "POST" });
+        window.location.replace("/");
+      } catch (err) {
+        if (err.status === 401) {
+          window.location.replace("/");
+          return;
+        }
+        showStatus(err.message);
+        elements.logoutButton.disabled = false;
+      }
+    });
+
+    async function init() {
+      try {
+        const user = await api("/api/me");
+        elements.username.textContent = user.username;
+        elements.profileUsername.textContent = user.username;
+        elements.balance.textContent = formatBalance(user.balanceCents);
+        elements.profileBalance.textContent = formatBalance(user.balanceCents);
+        await Promise.all([loadSessions(), loadHistory()]);
+      } catch (err) {
+        if (err.status === 401) {
+          window.location.replace("/");
+          return;
+        }
+        showStatus(err.message);
+      }
+    }
+
+    let sessionReady = false;
+    async function refreshAll() {
+      try {
+        const user = await api("/api/me");
+        elements.username.textContent = user.username;
+        elements.profileUsername.textContent = user.username;
+        elements.balance.textContent = formatBalance(user.balanceCents);
+        elements.profileBalance.textContent = formatBalance(user.balanceCents);
+        await Promise.all([loadSessions(), loadHistory()]);
+      } catch (err) {
+        if (err.status === 401) {
+          window.location.replace("/");
+        }
+      }
+    }
+
+    window.addEventListener("focus", () => {
+      if (sessionReady) void refreshAll();
+    });
+
+    init().then(() => { sessionReady = true; });
+  </script>
+</body>
+</html>

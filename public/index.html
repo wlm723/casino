@@ -234,6 +234,29 @@
 
     [hidden] { display: none !important; }
 
+    [data-theme="light"] { color-scheme: light; color: #30243a; background: #f4eff8; }
+    [data-theme="light"] body {
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 42%),
+        #f4eff8;
+    }
+    [data-theme="light"] h1,
+    [data-theme="light"] .card-heading { color: #382544; text-shadow: none; }
+    [data-theme="light"] .card {
+      border-color: #ddd0e8;
+      background: linear-gradient(145deg, #ffffff, #f6f0fb);
+    }
+    [data-theme="light"] .field,
+    [data-theme="light"] .remember-row,
+    [data-theme="light"] .card-subtitle,
+    [data-theme="light"] .text-button { color: #51445b; }
+    [data-theme="light"] .field input,
+    [data-theme="light"] .peek-button {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #30243a;
+    }
+
     @media (max-width: 520px) {
       body { padding: 24px 12px; }
       .card { border-radius: 20px; }
@@ -326,6 +349,25 @@
 
     let isSignup = false;
     let requestPending = false;
+
+    // Global casino theme (set in Account): visual only here.
+    function readLoginTheme() {
+      try {
+        return localStorage.getItem("tax-global-theme") || "dark";
+      } catch {
+        return "dark";
+      }
+    }
+    function applyLoginTheme(theme) {
+      const normalized = theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme = normalized;
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = normalized === "light" ? "#f4eff8" : "#100b1c";
+    }
+    applyLoginTheme(readLoginTheme());
+    window.addEventListener("storage", (event) => {
+      if (event.key === "tax-global-theme") applyLoginTheme(event.newValue || "dark");
+    });
 
     async function api(path, options = {}) {
       const response = await fetch(path, {

@@ -19,6 +19,16 @@ const multiplierForStep = (step) => (
     ? PICK_MULTIPLIERS[step]
     : 0
 );
+// Cumulative payout across ladder steps 0..lastStep (each step floored,
+// matching the pick endpoint). Shared by live credit, bomb revokes, and
+// /api/history so the three can never diverge.
+function pickboxTotalToStep(wager, lastStep) {
+  let total = 0;
+  for (let step = 0; step <= lastStep; step += 1) {
+    total += Math.floor(wager * multiplierForStep(step));
+  }
+  return total;
+}
 const SESSION_SHORT_MS = 24 * 3600 * 1000; // default: browser session, 24h server expiry
 const SESSION_LONG_MS = 30 * 24 * 3600 * 1000; // "keep me logged in": 30 days
 const PORT = process.env.PORT || 3000;
@@ -141,6 +151,14 @@ const safeCents = (value) => {
   }
   return cents;
 };
+// Signed per-action delta (a bomb/crash revokes earlier payouts as a
+// negative number). Balances themselves stay guarded by safeCents.
+const safeDelta = (value) => {
+  if (!Number.isSafeInteger(value)) {
+    throw new Error("The payout amount is invalid.");
+  }
+  return value;
+};
 
 app.post("/api/signup", limit, asyncRoute(async (req, res) => {
   const { username, password, remember } = req.body || {};
@@ -242,6 +260,154 @@ app.get("/api/sessions", authenticate, asyncRoute(async (req, res) => {
   res.json({ current: req.tokenHash, sessions: await listSessions(req.user.id) });
 }));
 
+app.get("/api/history", authenticate, asyncRoute(async (req, res) => {
+  const userId = req.user.id;
+
+  const [pbRes, chRes, plRes, avRes] = await Promise.all([
+    database.query(
+      `SELECT id, wager_cents, status, row_count, current_row, created_at
+       FROM pickbox_rounds WHERE user_id = $1 AND status != 'active'
+       ORDER BY created_at DESC LIMIT 25`,
+      [userId]
+    ),
+    database.query(
+      `SELECT id, wager_cents, status, lane_count, current_lane, difficulty, created_at
+       FROM chicken_rounds WHERE user_id = $1 AND status != 'active'
+       ORDER BY created_at DESC LIMIT 25`,
+      [userId]
+    ),
+    database.query(
+      `SELECT id, wager_cents, multiplier, payout_cents, row_count, risk, created_at
+       FROM plinko_rounds WHERE user_id = $1
+       ORDER BY created_at DESC LIMIT 25`,
+      [userId]
+    ),
+    database.query(
+      `SELECT id, wager_cents, status, crash_point, cashout_mult, payout_cents, created_at
+       FROM aviator_rounds WHERE user_id = $1 AND status != 'active'
+       ORDER BY created_at DESC LIMIT 25`,
+      [userId]
+    )
+  ]);
+
+  const items = [];
+
+  pbRes.rows.forEach((r) => {
+    const wager = Number(r.wager_cents) || 0;
+    let payout = 0;
+    let outcome = "Lost";
+    let badgeClass = "loss";
+
+    // Picks credit cumulatively (see pickboxTotalToStep): history reports
+    // the same total the live endpoint paid.
+    if (r.status === "won") {
+      const lastStep = Number(r.row_count) - 1;
+      const mult = multiplierForStep(lastStep);
+      payout = pickboxTotalToStep(wager, lastStep);
+      outcome = `${mult}x Won`;
+      badgeClass = "win";
+    } else if (r.status === "cashed_out") {
+      const lastStep = Math.max(0, Number(r.row_count) - 1 - (Number(r.current_row) + 1));
+      const mult = multiplierForStep(lastStep);
+      payout = pickboxTotalToStep(wager, lastStep);
+      outcome = `${mult}x Cashed out`;
+      badgeClass = "cash";
+    } else if (r.status === "abandoned") {
+      outcome = "Abandoned";
+    }
+
+    items.push({
+      id: r.id,
+      game: "Pick a Box",
+      wagerCents: wager,
+      payoutCents: payout,
+      outcome,
+      badgeClass,
+      createdAt: Number(r.created_at) || 0
+    });
+  });
+
+  chRes.rows.forEach((r) => {
+    const wager = Number(r.wager_cents) || 0;
+    let payout = 0;
+    let outcome = "Crashed";
+    let badgeClass = "loss";
+
+    // Crossings credit cumulatively (see chickenTotalToLanes): history
+    // reports the same total the live endpoint paid.
+    if (r.status === "won") {
+      const crossed = Number(r.lane_count);
+      const mult = chickenMultiplierForStep(r.difficulty, crossed - 1);
+      payout = chickenTotalToLanes(wager, r.difficulty, crossed);
+      outcome = `${mult}x Won`;
+      badgeClass = "win";
+    } else if (r.status === "cashed_out") {
+      const crossed = Math.max(0, Number(r.current_lane));
+      const mult = chickenMultiplierForStep(r.difficulty, crossed - 1);
+      payout = chickenTotalToLanes(wager, r.difficulty, crossed);
+      outcome = `${mult}x Cashed out`;
+      badgeClass = "cash";
+    } else if (r.status === "abandoned") {
+      outcome = "Abandoned";
+    }
+
+    items.push({
+      id: r.id,
+      game: "Chicken Road",
+      wagerCents: wager,
+      payoutCents: payout,
+      outcome,
+      badgeClass,
+      createdAt: Number(r.created_at) || 0
+    });
+  });
+
+  plRes.rows.forEach((r) => {
+    const wager = Number(r.wager_cents) || 0;
+    const payout = Number(r.payout_cents) || 0;
+    const mult = Number(r.multiplier) || 0;
+    items.push({
+      id: r.id,
+      game: "Plinko",
+      wagerCents: wager,
+      payoutCents: payout,
+      outcome: `${mult}x (${r.risk})`,
+      badgeClass: payout > wager ? "win" : (payout === wager ? "cash" : "loss"),
+      createdAt: Number(r.created_at) || 0
+    });
+  });
+
+  avRes.rows.forEach((r) => {
+    const wager = Number(r.wager_cents) || 0;
+    const payout = Number(r.payout_cents) || 0;
+    let outcome = `Crashed @ ${Number(r.crash_point).toFixed(2)}x`;
+    let badgeClass = "loss";
+
+    if (r.status === "cashed_out") {
+      const mult = Number(r.cashout_mult) || 0;
+      outcome = `${mult.toFixed(2)}x Cashed out`;
+      badgeClass = "win";
+    } else if (r.status === "abandoned") {
+      outcome = "Abandoned";
+    }
+
+    items.push({
+      id: r.id,
+      game: "Aviator",
+      wagerCents: wager,
+      payoutCents: payout,
+      outcome,
+      badgeClass,
+      createdAt: Number(r.created_at) || 0
+    });
+  });
+
+  items.sort((a, b) => b.createdAt - a.createdAt);
+
+  res.json({ history: items.slice(0, 50) });
+}));
+
+
 app.delete("/api/sessions", authenticate, asyncRoute(async (req, res) => {
   const { tokenHash, allOthers } = req.body || {};
   if (allOthers === true) {
@@ -297,7 +463,12 @@ app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
       const swapIndex = crypto.randomInt(index + 1);
       [columns[index], columns[swapIndex]] = [columns[swapIndex], columns[index]];
     }
-    return columns.slice(0, columns.length / 2);
+    // Luck mode is generous: 3 in 4 boxes are safe per row (fixed mode and
+    // dark theme keep the strict house odds).
+    const safeCount = mode === "luck"
+      ? Math.floor(columns.length * 3 / 4)
+      : columns.length / 2;
+    return columns.slice(0, safeCount);
   });
 
   // Plain sequential debit: one statement, matched rows checked directly.
@@ -313,17 +484,17 @@ app.post("/api/pickbox/rounds", authenticate, asyncRoute(async (req, res) => {
     return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req, wagerCents)}` });
   }
   try {
+    // One round trip: retire any live round and record the new one together.
     await database.query(
-      `UPDATE pickbox_rounds
-       SET status = 'abandoned', updated_at = $2
-       WHERE user_id = $1 AND status = 'active'`,
-      [req.user.id, now]
-    );
-    await database.query(
-      `INSERT INTO pickbox_rounds
+      `WITH abandoned AS (
+         UPDATE pickbox_rounds
+         SET status = 'abandoned', updated_at = $2
+         WHERE user_id = $1 AND status = 'active'
+       )
+       INSERT INTO pickbox_rounds
        (id, user_id, mode, row_count, current_row, wager_cents, status, safe_columns, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'active', $7::jsonb, $8, $8)`,
-      [id, req.user.id, mode, rows, rows - 1, wagerCents, JSON.stringify(safeColumns), now]
+       VALUES ($3, $1, $4, $5, $6, $7, 'active', $8::jsonb, $9, $9)`,
+      [req.user.id, now, id, mode, rows, rows - 1, wagerCents, JSON.stringify(safeColumns), now]
     );
   } catch (error) {
     // Never take money without recording the round: refund the debit.
@@ -373,41 +544,45 @@ app.post("/api/pickbox/rounds/:roundId/pick", authenticate, asyncRoute(async (re
     : "lost";
   const nextRow = wonPick && row > 0 ? row - 1 : row;
   const stepIndex = Number(round.row_count) - 1 - row;
+  const wager = Number(round.wager_cents) || 0;
   const multiplier = wonPick ? multiplierForStep(stepIndex) : 0;
-  const payoutCents = wonPick ? Math.floor(Number(round.wager_cents) * multiplier) : 0;
-  const { rows: changedRows } = await database.query(
-    `UPDATE pickbox_rounds
-     SET status = $1, current_row = $2, updated_at = $3
-     WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_row = $6
-     RETURNING status, current_row`,
-    [status, nextRow, Date.now(), roundId, req.user.id, row]
-  );
-  if (!changedRows[0]) {
-    return res.status(409).json({ error: "That pick was already submitted. Please try again." });
+  let payoutCents = wonPick ? Math.floor(wager * multiplier) : 0;
+  if (!wonPick) {
+    // Bomb revokes everything this round already paid, so losing always
+    // costs exactly the stake instead of profiting from earlier picks.
+    payoutCents -= pickboxTotalToStep(wager, Number(round.row_count) - 2 - row);
   }
-  let balanceRows;
-  if (wonPick && payoutCents > 0) {
-    ({ rows: balanceRows } = await database.query(
-      `UPDATE users
-       SET balance_cents = balance_cents + $1
-       WHERE id = $2
-       RETURNING balance_cents`,
-      [payoutCents, req.user.id]
-    ));
-  } else {
-    ({ rows: balanceRows } = await database.query(
-      "SELECT balance_cents FROM users WHERE id = $1",
-      [req.user.id]
-    ));
+  // One round trip: resolve the round and credit the payout together. The
+  // credit only applies when the round row actually changes, so a duplicate
+  // submit still 409s without ever paying twice. GREATEST keeps a large
+  // revoke from driving the balance below zero (e.g. winnings spent
+  // mid-round on another game).
+  const { rows: settledRows } = await database.query(
+    `WITH changed_round AS (
+       UPDATE pickbox_rounds
+       SET status = $1, current_row = $2, updated_at = $3
+       WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_row = $6
+       RETURNING status, current_row
+     )
+     UPDATE users
+     SET balance_cents = GREATEST(0, balance_cents + $7)
+     WHERE id = $5 AND EXISTS (SELECT 1 FROM changed_round)
+     RETURNING balance_cents,
+       (SELECT status FROM changed_round) AS status,
+       (SELECT current_row FROM changed_round) AS current_row`,
+    [status, nextRow, Date.now(), roundId, req.user.id, row, payoutCents]
+  );
+  if (!settledRows[0]) {
+    return res.status(409).json({ error: "That pick was already submitted. Please try again." });
   }
 
   const completed = status !== "active";
   res.json({
     safe: wonPick,
     status,
-    currentRow: Number(changedRows[0].current_row),
-    balanceCents: safeCents(balanceRows[0].balance_cents),
-    payoutCents: safeCents(payoutCents),
+    currentRow: Number(settledRows[0].current_row),
+    balanceCents: safeCents(settledRows[0].balance_cents),
+    payoutCents: safeDelta(payoutCents),
     multiplier,
     safeColumns: completed ? round.safe_columns : undefined
   });
@@ -471,6 +646,16 @@ const chickenMultiplierForStep = (difficulty, step) => {
   const mult = chickenLadder(difficulty)[step];
   return typeof mult === "number" && mult > 0 ? mult : 0;
 };
+// Cumulative payout across lanes 0..crossed-1 (each lane floored, matching
+// the cross endpoint). Shared by live credit, crash revokes, and
+// /api/history so the three can never diverge.
+function chickenTotalToLanes(wager, difficulty, crossed) {
+  let total = 0;
+  for (let step = 0; step < crossed; step += 1) {
+    total += Math.floor(wager * chickenMultiplierForStep(difficulty, step));
+  }
+  return total;
+}
 
 app.post("/api/chicken/rounds", authenticate, asyncRoute(async (req, res) => {
   const { mode, difficulty, lanes, wagerCents } = req.body || {};
@@ -487,7 +672,11 @@ app.post("/api/chicken/rounds", authenticate, asyncRoute(async (req, res) => {
     return res.status(400).json({ error: "Bet must be between €0.10 and €100.00." });
   }
 
-  const crashPercent = CHICKEN_DIFFICULTIES[difficulty].crashPercent;
+  // Luck mode is generous: the per-lane crash chance is halved (fixed mode
+  // and dark theme keep the strict house odds).
+  const crashPercent = mode === "luck"
+    ? Math.floor(CHICKEN_DIFFICULTIES[difficulty].crashPercent / 2)
+    : CHICKEN_DIFFICULTIES[difficulty].crashPercent;
   const laneSafe = mode === "fixed"
     ? Array.from({ length: lanes }, (_, lane) => lane === 0)
     : Array.from({ length: lanes }, () => crypto.randomInt(100) >= crashPercent);
@@ -507,17 +696,17 @@ app.post("/api/chicken/rounds", authenticate, asyncRoute(async (req, res) => {
     return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req, wagerCents)}` });
   }
   try {
+    // One round trip: retire any live round and record the new one together.
     await database.query(
-      `UPDATE chicken_rounds
-       SET status = 'abandoned', updated_at = $2
-       WHERE user_id = $1 AND status = 'active'`,
-      [req.user.id, now]
-    );
-    await database.query(
-      `INSERT INTO chicken_rounds
+      `WITH abandoned AS (
+         UPDATE chicken_rounds
+         SET status = 'abandoned', updated_at = $2
+         WHERE user_id = $1 AND status = 'active'
+       )
+       INSERT INTO chicken_rounds
        (id, user_id, lane_count, current_lane, wager_cents, status, lanes, created_at, updated_at, mode, difficulty)
-       VALUES ($1, $2, $3, 0, $4, 'active', $5::jsonb, $6, $6, $7, $8)`,
-      [id, req.user.id, lanes, wagerCents, JSON.stringify(laneSafe), now, mode, difficulty]
+       VALUES ($3, $1, $4, 0, $5, 'active', $6::jsonb, $7, $7, $8, $9)`,
+      [req.user.id, now, id, lanes, wagerCents, JSON.stringify(laneSafe), now, mode, difficulty]
     );
   } catch (error) {
     // Never take money without recording the round: refund the debit.
@@ -561,41 +750,45 @@ app.post("/api/chicken/rounds/:roundId/cross", authenticate, asyncRoute(async (r
     ? (lane === Number(round.lane_count) - 1 ? "won" : "active")
     : "lost";
   const nextLane = safe ? lane + 1 : lane;
+  const wager = Number(round.wager_cents) || 0;
   const multiplier = safe ? chickenMultiplierForStep(round.difficulty, lane) : 0;
-  const payoutCents = safe ? Math.floor(Number(round.wager_cents) * multiplier) : 0;
-  const { rows: changedRows } = await database.query(
-    `UPDATE chicken_rounds
-     SET status = $1, current_lane = $2, updated_at = $3
-     WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_lane = $6
-     RETURNING status, current_lane`,
-    [status, nextLane, Date.now(), roundId, req.user.id, lane]
-  );
-  if (!changedRows[0]) {
-    return res.status(409).json({ error: "That crossing was already submitted. Please try again." });
+  let payoutCents = safe ? Math.floor(wager * multiplier) : 0;
+  if (!safe) {
+    // Crash revokes everything this round already paid, so losing always
+    // costs exactly the stake instead of profiting from earlier lanes.
+    payoutCents -= chickenTotalToLanes(wager, round.difficulty, lane);
   }
-  let balanceRows;
-  if (safe && payoutCents > 0) {
-    ({ rows: balanceRows } = await database.query(
-      `UPDATE users
-       SET balance_cents = balance_cents + $1
-       WHERE id = $2
-       RETURNING balance_cents`,
-      [payoutCents, req.user.id]
-    ));
-  } else {
-    ({ rows: balanceRows } = await database.query(
-      "SELECT balance_cents FROM users WHERE id = $1",
-      [req.user.id]
-    ));
+  // One round trip: resolve the lane and credit the payout together. The
+  // credit only applies when the round row actually changes, so a duplicate
+  // submit still 409s without ever paying twice. GREATEST keeps a large
+  // revoke from driving the balance below zero (e.g. winnings spent
+  // mid-round on another game).
+  const { rows: settledRows } = await database.query(
+    `WITH changed_round AS (
+       UPDATE chicken_rounds
+       SET status = $1, current_lane = $2, updated_at = $3
+       WHERE id = $4 AND user_id = $5 AND status = 'active' AND current_lane = $6
+       RETURNING status, current_lane
+     )
+     UPDATE users
+     SET balance_cents = GREATEST(0, balance_cents + $7)
+     WHERE id = $5 AND EXISTS (SELECT 1 FROM changed_round)
+     RETURNING balance_cents,
+       (SELECT status FROM changed_round) AS status,
+       (SELECT current_lane FROM changed_round) AS current_lane`,
+    [status, nextLane, Date.now(), roundId, req.user.id, lane, payoutCents]
+  );
+  if (!settledRows[0]) {
+    return res.status(409).json({ error: "That crossing was already submitted. Please try again." });
   }
 
   const completed = status !== "active";
   res.json({
     safe,
     status,
-    currentLane: Number(changedRows[0].current_lane),
-    balanceCents: safeCents(balanceRows[0].balance_cents),
-    payoutCents: safeCents(payoutCents),
+    currentLane: Number(settledRows[0].current_lane),
+    balanceCents: safeCents(settledRows[0].balance_cents),
+    payoutCents: safeDelta(payoutCents),
     multiplier,
     lanes: completed ? round.lanes : undefined
   });
@@ -722,6 +915,16 @@ app.post("/api/plinko/drop", authenticate, asyncRoute(async (req, res) => {
   } else {
     path = Array.from({ length: rows }, () => crypto.randomInt(2));
     slot = path.reduce((sum, step) => sum + step, 0);
+    // Luck mode is generous: a sub-half-stake landing earns a second-chance
+    // redraw, keeping the better of the two (dark theme keeps one fair draw).
+    if (table[slot] < 0.5) {
+      const retryPath = Array.from({ length: rows }, () => crypto.randomInt(2));
+      const retrySlot = retryPath.reduce((sum, step) => sum + step, 0);
+      if (table[retrySlot] > table[slot]) {
+        path = retryPath;
+        slot = retrySlot;
+      }
+    }
   }
   const multiplier = table[slot];
   const payoutCents = Math.floor(wagerCents * multiplier);
@@ -739,18 +942,19 @@ app.post("/api/plinko/drop", authenticate, asyncRoute(async (req, res) => {
     return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req, wagerCents)}` });
   }
   try {
-    await database.query(
-      `INSERT INTO plinko_rounds
-       (id, user_id, row_count, risk, wager_cents, multiplier, payout_cents, created_at, mode)
-       VALUES ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9)`,
-      [id, req.user.id, rows, risk, wagerCents, String(multiplier), payoutCents, now, mode]
-    );
+    // One round trip: record the round and credit the payout together.
     const { rows: creditedRows } = await database.query(
-      `UPDATE users
-       SET balance_cents = balance_cents + $1
+      `WITH new_round AS (
+         INSERT INTO plinko_rounds
+         (id, user_id, row_count, risk, wager_cents, multiplier, payout_cents, created_at, mode)
+         VALUES ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9)
+         RETURNING payout_cents
+       )
+       UPDATE users
+       SET balance_cents = balance_cents + (SELECT payout_cents FROM new_round)
        WHERE id = $2
        RETURNING balance_cents`,
-      [payoutCents, req.user.id]
+      [id, req.user.id, rows, risk, wagerCents, String(multiplier), payoutCents, now, mode]
     );
     res.status(201).json({
       slot,
@@ -774,11 +978,12 @@ app.post("/api/plinko/drop", authenticate, asyncRoute(async (req, res) => {
 // against server time, never the client's word.
 const AVIATOR_RATE = 0.06;
 const AVIATOR_MAX_CRASH = 500;
-const AVIATOR_HOUSE = 0.99;
+const AVIATOR_INSTANT_CRASH_PROB = 0.03; // instant bust at x1.00
+const AVIATOR_HOUSE_FACTOR = 0.99; // 1% house edge: crash = floor(0.99 / (1 - roll) * 100) / 100
 function aviatorCrashPoint() {
   const roll = crypto.randomInt(2 ** 32) / 2 ** 32;
-  if (roll < 0.03) return 1;
-  return Math.min(AVIATOR_MAX_CRASH, Math.floor((AVIATOR_HOUSE / (1 - roll)) * 100) / 100);
+  if (roll < AVIATOR_INSTANT_CRASH_PROB) return 1;
+  return Math.min(AVIATOR_MAX_CRASH, Math.floor((AVIATOR_HOUSE_FACTOR / (1 - roll)) * 100) / 100);
 }
 const aviatorMultAt = (elapsedMs) => Math.exp(AVIATOR_RATE * (elapsedMs / 1000));
 
@@ -805,17 +1010,17 @@ app.post("/api/aviator/rounds", authenticate, asyncRoute(async (req, res) => {
     return res.status(409).json({ error: `Insufficient balance for that bet.${await haveSuffix(req, wagerCents)}` });
   }
   try {
+    // One round trip: retire any live round and record the new one together.
     await database.query(
-      `UPDATE aviator_rounds
-       SET status = 'abandoned', updated_at = $2
-       WHERE user_id = $1 AND status = 'active'`,
-      [req.user.id, now]
-    );
-    await database.query(
-      `INSERT INTO aviator_rounds
+      `WITH abandoned AS (
+         UPDATE aviator_rounds
+         SET status = 'abandoned', updated_at = $2
+         WHERE user_id = $1 AND status = 'active'
+       )
+       INSERT INTO aviator_rounds
        (id, user_id, wager_cents, crash_point, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4::numeric, 'active', $5, $5)`,
-      [id, req.user.id, wagerCents, String(crash), now]
+       VALUES ($3, $1, $4, $5::numeric, 'active', $6, $6)`,
+      [req.user.id, now, id, wagerCents, String(crash), now]
     );
   } catch (error) {
     // Never take money without recording the round: refund the debit.
@@ -845,37 +1050,45 @@ app.post("/api/aviator/rounds/:roundId/cashout", authenticate, asyncRoute(async 
   const liveMult = Math.floor(aviatorMultAt(Date.now() - Number(round.created_at)) * 100) / 100;
   const crash = Number(round.crash_point);
   if (liveMult >= crash) {
-    await database.query(
-      "UPDATE aviator_rounds SET status = 'lost', updated_at = $1 WHERE id = $2 AND status = 'active'",
-      [Date.now(), roundId]
+    // One round trip: mark the crash and read the balance together.
+    const { rows: lostRows } = await database.query(
+      `WITH lost_round AS (
+         UPDATE aviator_rounds
+         SET status = 'lost', payout_cents = 0, updated_at = $1
+         WHERE id = $2 AND user_id = $3 AND status = 'active'
+         RETURNING id
+       )
+       SELECT balance_cents FROM users WHERE id = $3`,
+      [Date.now(), roundId, req.user.id]
     );
-    const { rows: balRows } = await database.query(
-      "SELECT balance_cents FROM users WHERE id = $1",
-      [req.user.id]
-    );
-    return res.json({ crashed: true, crashPoint: crash, balanceCents: safeCents(balRows[0].balance_cents) });
+    return res.json({ crashed: true, crashPoint: crash, balanceCents: safeCents(lostRows[0].balance_cents) });
   }
 
   const payoutCents = Math.floor(Number(round.wager_cents) * liveMult);
-  const { rows: changedRows } = await database.query(
-    `UPDATE aviator_rounds
-     SET status = 'cashed_out', cashout_mult = $1::numeric, payout_cents = $2, updated_at = $3
-     WHERE id = $4 AND status = 'active'
-     RETURNING id`,
-    [String(liveMult), payoutCents, Date.now(), roundId]
+  // One round trip: cash out and credit together. The credit only applies
+  // when the round row actually changes, so a duplicate submit still 409s
+  // without ever paying twice.
+  const { rows: settledRows } = await database.query(
+    `WITH changed_round AS (
+       UPDATE aviator_rounds
+       SET status = 'cashed_out', cashout_mult = $1::numeric, payout_cents = $2, updated_at = $3
+       WHERE id = $4 AND user_id = $5 AND status = 'active'
+       RETURNING id
+     )
+     UPDATE users
+     SET balance_cents = balance_cents + $2
+     WHERE id = $5 AND EXISTS (SELECT 1 FROM changed_round)
+     RETURNING balance_cents`,
+    [String(liveMult), payoutCents, Date.now(), roundId, req.user.id]
   );
-  if (!changedRows[0]) {
+  if (!settledRows[0]) {
     return res.status(409).json({ error: "That action was already submitted. Please try again." });
   }
-  const { rows: balRows } = await database.query(
-    "UPDATE users SET balance_cents = balance_cents + $1 WHERE id = $2 RETURNING balance_cents",
-    [payoutCents, req.user.id]
-  );
   res.json({
     crashed: false,
     cashMult: liveMult,
     payoutCents: safeCents(payoutCents),
-    balanceCents: safeCents(balRows[0].balance_cents)
+    balanceCents: safeCents(settledRows[0].balance_cents)
   });
 }));
 
@@ -913,14 +1126,22 @@ app.get("/api/aviator/rounds/:roundId/status", authenticate, asyncRoute(async (r
   const crash = Number(round.crash_point);
   if (liveMult < crash) return res.json({ crashed: false });
   await database.query(
-    "UPDATE aviator_rounds SET status = 'lost', updated_at = $1 WHERE id = $2 AND status = 'active'",
-    [Date.now(), roundId]
+    "UPDATE aviator_rounds SET status = 'lost', payout_cents = 0, updated_at = $1 WHERE id = $2 AND user_id = $3 AND status = 'active'",
+    [Date.now(), roundId, req.user.id]
   );
   res.json({ crashed: true, crashPoint: crash, balanceCents: balance });
 }));
 
-app.use((error, req, res, next) => {
-  if (res.headersSent) return next(error);
+app.get("/healthz", asyncRoute(async (req, res) => {
+  try {
+    await database.query("SELECT 1");
+    res.json({ ok: true, db: true });
+  } catch (error) {
+    res.status(503).json({ ok: false, db: false });
+  }
+}));
+
+app.use((error, req, res, next) => {  if (res.headersSent) return next(error);
   if (error.type === "entity.parse.failed") {
     return res.status(400).json({ error: "Invalid JSON request body" });
   }
@@ -932,4 +1153,13 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: "An internal server error occurred." });
 });
 
-app.listen(PORT, () => console.log(`Casino listening on port ${PORT}`));
+const server = app.listen(PORT, () => console.log(`Casino listening on port ${PORT}`));
+
+// Graceful shutdown: stop accepting connections, then exit so deploys
+// don't drop in-flight requests mid-round.
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 10000).unref();
+  });
+}

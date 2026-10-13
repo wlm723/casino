@@ -116,28 +116,6 @@
       box-shadow: inset 0 -3px 0 #c99a3c;
     }
     [data-theme="light"] .message { color: #51445b; }
-    [data-theme="light"] .theme-toggle {
-      border-color: #cbbbd8;
-      background: #fff;
-      color: #49345a;
-    }
-
-    .theme-toggle {
-      display: inline-flex;
-      min-height: 44px;
-      align-items: center;
-      margin: 10px 0 0;
-      padding: 0 14px;
-      border: 1px solid #665477;
-      border-radius: 10px;
-      background: #21192d;
-      color: #f5f0e8;
-      cursor: pointer;
-      font: inherit;
-      font-size: .82rem;
-      font-weight: 700;
-    }
-    .theme-toggle:disabled { cursor: default; opacity: .55; }
 
     .game { width: min(100%, 760px); text-align: center; }
 
@@ -484,7 +462,6 @@
       <a class="home-link" href="./lobby.html">← Back to TAX Casino</a>
       <h1>Plinko</h1>
       <p class="tagline">Drop the ball. Every bounce is 50/50 — edges pay big.</p>
-      <div><button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to light theme</button></div>
 
       <section class="scoreboard" aria-label="Account balance and game score">
         <div class="stat"><span class="stat-value" id="balance">€100.00</span><span class="stat-label">Balance</span></div>
@@ -538,7 +515,7 @@
     const DEFAULT_ROWS = 12;
     const DEFAULT_WAGER = 10;
     const MIN_WAGER_CENTS = 10;
-    const STEP_MS = 200;
+    const STEP_MS = 110;
     const SLOWDOWN_POWER = 0.65;
     // Display copy of the server tables (PLINKO_TABLES in server.js).
     // Server payouts are authoritative.
@@ -563,7 +540,6 @@
     const rowCountInput = document.querySelector("#row-count");
     const wagerInput = document.querySelector("#wager");
     const board = document.querySelector("#board");
-    const themeToggle = document.querySelector("#theme-toggle");
     const slotsBar = document.querySelector("#slots");    const message = document.querySelector("#message");
     const dropButton = document.querySelector("#drop");
     const balanceDisplay = document.querySelector("#balance");
@@ -640,27 +616,37 @@
       return (TABLES[risk] && TABLES[risk][rows]) || TABLES.medium[12];
     }
 
-    function updateTheme(theme) {
-      document.documentElement.dataset.theme = theme;
-      const isLight = theme === "light";
-      gameMode = isLight ? "luck" : "fixed";
-      themeToggle.setAttribute("aria-pressed", String(isLight));
-      themeToggle.textContent = isLight
-        ? "Switch to dark theme"
-        : "Switch to light theme";
-      themeToggle.title = isLight
-        ? "Switches to the dark theme"
-        : "Switches to the light theme";
-      document.querySelector('meta[name="theme-color"]').content = isLight ? "#f4eff8" : "#100b1c";
-      localStorage.setItem("plinko-theme", theme);
+    // Global casino theme (set in Account). Visual theme always applies;
+    // gameMode is locked while a ball is dropping so a mid-drop theme
+    // change can't flip the drop's odds.
+    const THEME_KEY = "tax-global-theme";
+    const LEGACY_THEME_KEY = "plinko-theme";
+    function readStoredTheme() {
+      try {
+        return localStorage.getItem(THEME_KEY)
+          || localStorage.getItem(LEGACY_THEME_KEY)
+          || "dark";
+      } catch {
+        return "dark";
+      }
     }
-
-    themeToggle.addEventListener("click", () => {
-      if (themeToggle.disabled || dropping) return;
-      updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+    function applyTheme(theme) {
+      const normalized = theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme = normalized;
+      if (!dropping) gameMode = normalized === "light" ? "luck" : "fixed";
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = normalized === "light" ? "#f4eff8" : "#100b1c";
+    }
+    function syncThemeFromStorage() {
+      applyTheme(readStoredTheme());
+    }
+    applyTheme(readStoredTheme());
+    window.addEventListener("storage", (event) => {
+      if (event.key === THEME_KEY || event.key === LEGACY_THEME_KEY) syncThemeFromStorage();
     });
-
-    updateTheme(localStorage.getItem("plinko-theme") === "light" ? "light" : "dark");
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) syncThemeFromStorage();
+    });
 
     function slotClass(mult) {
       if (mult >= 20) return "t3";
@@ -688,7 +674,9 @@
         throw new Error("The server returned an invalid response. Please try again.");
       }
       if (!response.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+        const error = new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+        error.status = response.status;
+        throw error;
       }
       return data;
     }
@@ -738,7 +726,7 @@
     function renderBoard() {
       board.replaceChildren();
       slotsBar.replaceChildren();
-      const { width, height, gap, rowH } = boardMetrics();
+      const { gap, rowH } = boardMetrics();
       for (let r = 0; r < rows; r += 1) {
         for (let i = 0; i <= r; i += 1) {
           const peg = document.createElement("div");
@@ -801,7 +789,6 @@
       }
       dropping = true;
       dropButton.disabled = true;
-      themeToggle.disabled = true;
       setControlsDisabled(true);
       message.textContent = "Dropping…";
       message.className = "message";
@@ -812,7 +799,6 @@
       } catch (error) {
         dropping = false;
         dropButton.disabled = false;
-        themeToggle.disabled = false;
         setControlsDisabled(false);
         updateWagerLimit();
         void refreshBalance();
@@ -824,11 +810,12 @@
 
       // Settle money first: the response is authoritative. The animation
       // below is best-effort and must never strand a paid drop.
-      balanceCents = result.balanceCents;
-      updateBalanceDisplay();
+      try {
+        balanceCents = result.balanceCents;
+        updateBalanceDisplay();
 
-      renderBoard();
-      const { gap, rowH } = boardMetrics();
+        renderBoard();
+        const { gap, rowH } = boardMetrics();
       const ball = document.createElement("div");
       ball.className = "ball";
       ball.style.left = "50%";
@@ -900,7 +887,7 @@
           }
           requestAnimationFrame(frame);
         });
-        if (!reduced) await delay(380);
+        if (!reduced) await delay(150);
       } catch (error) {
         console.error("Plinko animation failed:", error);
       }
@@ -929,12 +916,16 @@
       }
       message.textContent = `Landed ×${mult} — ${formatCurrency(payoutCents)} returned on ${formatCurrency(wagerCents)}.`;
       message.className = profited ? "message win" : "message lose";
-
-      dropping = false;
-      dropButton.disabled = false;
-      themeToggle.disabled = false;
-      setControlsDisabled(false);
-      updateWagerLimit();
+      } catch (error) {
+        console.error("Plinko settle failed:", error);
+        message.textContent = "Drop settled but the board failed to render. Your balance is up to date.";
+        message.className = "message lose";
+      } finally {
+        dropping = false;
+        dropButton.disabled = false;
+        setControlsDisabled(false);
+        updateWagerLimit();
+      }
     }
 
     function syncRiskButtons() {
@@ -1005,6 +996,7 @@
     }
 
     window.addEventListener("focus", () => {
+      syncThemeFromStorage();
       if (!dropping) void refreshBalance();
     });
 

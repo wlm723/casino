@@ -43,6 +43,7 @@ const SCHEMA_STATEMENTS = [
   expires_at BIGINT NOT NULL
 );`,
   "CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);",
+  "CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions (expires_at);",
   "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_at BIGINT NOT NULL DEFAULT 0;",
   "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_agent TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ip TEXT NOT NULL DEFAULT '';",
@@ -52,6 +53,7 @@ const SCHEMA_STATEMENTS = [
   count INTEGER NOT NULL DEFAULT 0,
   window_start BIGINT NOT NULL DEFAULT 0
  );`,
+  "CREATE INDEX IF NOT EXISTS auth_attempts_window_start_idx ON auth_attempts (window_start);",
   `CREATE TABLE IF NOT EXISTS pickbox_rounds (
   id UUID PRIMARY KEY,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -171,6 +171,39 @@
       background: rgba(240, 201, 107, .09);
     }
 
+    [data-theme="light"] {
+      color-scheme: light;
+      color: #30243a;
+      background: #f4eff8;
+      --muted: #71667a;
+      --line: rgba(56, 34, 74, .14);
+    }
+    [data-theme="light"] body {
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 42%),
+        #f4eff8;
+    }
+    [data-theme="light"] .topbar { background: rgba(255, 255, 255, .88); }
+    [data-theme="light"] .brand-name,
+    [data-theme="light"] .section-heading h2,
+    [data-theme="light"] .panel h2,
+    [data-theme="light"] .hero h1,
+    [data-theme="light"] .tile-copy h3 { color: #382544; }
+    [data-theme="light"] .hero,
+    [data-theme="light"] .game-tile,
+    [data-theme="light"] .panel {
+      background: linear-gradient(145deg, #ffffff, #f6f0fb);
+    }
+    [data-theme="light"] .hero-tagline,
+    [data-theme="light"] .tile-copy p,
+    [data-theme="light"] .username { color: #51445b; }
+    [data-theme="light"] .filter-chip,
+    [data-theme="light"] .utility-button,
+    [data-theme="light"] .logout-button {
+      background: #fff;
+      color: #49345a;
+    }
+
     .logout-button:disabled { cursor: wait; opacity: .65; }
 
     .page-shell {
@@ -639,6 +672,7 @@
           <span class="balance-coin" aria-hidden="true">◆</span>
           <span class="balance-value" id="balance-value">€0.00</span>
         </div>
+        <a class="utility-button" href="/account.html">Account</a>
         <span class="username" id="username"></span>
         <button class="utility-button" id="mute-toggle" type="button" aria-pressed="true">
           <span aria-hidden="true" id="mute-icon">◖</span>
@@ -883,6 +917,31 @@
     let balanceFrame = 0;
     let sessionReady = false;
     let muted = true;
+
+    // Global casino theme (set in Account): visual only here, no game odds.
+    function readStoredTheme() {
+      try {
+        const legacy = ["plinko-theme", "pickbox-theme", "chicken-theme", "aviator-theme"]
+          .map((k) => localStorage.getItem(k))
+          .find((t) => t === "light" || t === "dark");
+        return localStorage.getItem("tax-global-theme") || legacy || "dark";
+      } catch {
+        return "dark";
+      }
+    }
+    function applyGlobalTheme(theme) {
+      const normalized = theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme = normalized;
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = normalized === "light" ? "#f4eff8" : "#100b1c";
+    }
+    applyGlobalTheme(readStoredTheme());
+    window.addEventListener("storage", (event) => {
+      if (event.key === "tax-global-theme") applyGlobalTheme(event.newValue || "dark");
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) applyGlobalTheme(readStoredTheme());
+    });
 
     async function api(path, options = {}) {
       const response = await fetch(path, {
@@ -1248,6 +1307,7 @@
     }
 
     window.addEventListener("focus", () => {
+      applyGlobalTheme(readStoredTheme());
       if (sessionReady) void refreshSession();
     });
     initialize();

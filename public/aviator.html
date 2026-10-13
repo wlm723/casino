@@ -232,6 +232,35 @@
     .mult-number.cashed { color: #83e2a7; text-shadow: 0 4px 26px rgba(60, 200, 120, .55); }
     .mult-number.crashed { color: #ff6b6b; }
 
+    [data-theme="light"] { color-scheme: light; color: #30243a; background: #f4eff8; }
+    [data-theme="light"] body {
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(169, 119, 213, .2), transparent 45%),
+        #f4eff8;
+    }
+    [data-theme="light"] h1 { color: #382544; text-shadow: none; }
+    [data-theme="light"] .tagline,
+    [data-theme="light"] .panel-row,
+    [data-theme="light"] .message { color: #51445b; }
+    [data-theme="light"] .stat {
+      border-color: #e2d3af;
+      background: linear-gradient(145deg, #fffdf7, #f8f0dc);
+    }
+    [data-theme="light"] .stat-value { color: #805b1d; }
+    [data-theme="light"] .stat-label { color: #71667a; }
+    [data-theme="light"] .panel {
+      border-color: #d8c9e3;
+      background: linear-gradient(145deg, #ffffff, #f6f0fb);
+    }
+    [data-theme="light"] .auto-target,
+    [data-theme="light"] .bet-input,
+    [data-theme="light"] .chip-btn,
+    [data-theme="light"] .sound-btn {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #30243a;
+    }
+
     .message {
       min-height: 30px;
       margin: 14px 0 10px;
@@ -428,8 +457,8 @@
           </div>
         </form>
         <div class="auto-row">
-          <label><input type="checkbox" id="auto-cash"> Auto cash out at ×</label>
-          <input class="auto-target" id="auto-target" type="number" min="1.01" step="0.01" value="2.00" aria-label="Auto cash-out multiplier">
+          <label><input type="checkbox" id="auto-cash" data-lock> Auto cash out at ×</label>
+          <input class="auto-target" id="auto-target" data-lock type="number" min="1.01" step="0.01" value="2.00" aria-label="Auto cash-out multiplier">
         </div>
         <button class="fly-btn bet" id="action" type="button">BET</button>
       </section>
@@ -548,7 +577,9 @@
         throw new Error("The server returned an invalid response. Please try again.");
       }
       if (!response.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+        const error = new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+        error.status = response.status;
+        throw error;
       }
       return data;
     }
@@ -597,6 +628,29 @@
     }));
     let trail = [];
     let headPos = { x: 0, y: 0 };
+
+    // Global casino theme (set in Account): visual only; Aviator odds live
+    // server-side and never depend on theme.
+    function readStoredTheme() {
+      try {
+        return localStorage.getItem("tax-global-theme") || "dark";
+      } catch {
+        return "dark";
+      }
+    }
+    function applyGlobalTheme(theme) {
+      const normalized = theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme = normalized;
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = normalized === "light" ? "#f4eff8" : "#1a0b12";
+    }
+    applyGlobalTheme(readStoredTheme());
+    window.addEventListener("storage", (event) => {
+      if (event.key === "tax-global-theme") applyGlobalTheme(event.newValue || "dark");
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) applyGlobalTheme(readStoredTheme());
+    });
 
     function drawGraph(currentMult) {
       const ctx = graph.getContext("2d");
@@ -802,7 +856,7 @@
       }
     }
 
-    window.setInterval(pollStatus, 400);
+    window.setInterval(pollStatus, 250);
 
     async function onAction() {
       if (roundBusy) return;
@@ -872,13 +926,29 @@
         updateWagerLimit();
         void loadRecent();
       } catch (error) {
-        flying = false;
-        message.textContent = error.message;
+        if (error.status === 401) {
+          window.location.replace("/");
+          return;
+        }
+        if (error.status === 409) {
+          // Round resolved without us (e.g. the cash-out landed but the
+          // response was lost, or another tab ended it): stand down and
+          // resync the authoritative balance.
+          flying = false;
+          message.textContent = error.message;
+          message.className = "message lose";
+          setActionBet();
+          setControlsDisabled(false);
+          updateWagerLimit();
+          void refreshBalance();
+          void loadRecent();
+          return;
+        }
+        // Transient failure: stay in flight so the user can retry.
+        // The server rules on timing; a later retry may still cash out
+        // or report the crash.
+        message.textContent = `${error.message} — you're still flying, try cashing out again.`;
         message.className = "message lose";
-        setActionBet();
-        setControlsDisabled(false);
-        updateWagerLimit();
-        if (error.status === 401) window.location.replace("/");
       } finally {
         roundBusy = false;
       }
@@ -912,6 +982,7 @@
     }
 
     window.addEventListener("focus", () => {
+      applyGlobalTheme(readStoredTheme());
       if (!flying && !roundBusy) void refreshBalance();
     });
 

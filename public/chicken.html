@@ -47,11 +47,6 @@
       background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(246, 240, 251, .98));
     }
     [data-theme="light"] h1 { color: #382544; text-shadow: none; }
-    [data-theme="light"] .theme-toggle {
-      border-color: #cbbbd8;
-      background: #fff;
-      color: #49345a;
-    }
 
     .game { width: min(100%, 1040px); text-align: center; }
 
@@ -128,23 +123,6 @@
       font-size: clamp(1.8rem, 5vw, 2.6rem);
       text-shadow: 0 3px 20px rgba(240, 201, 107, .18);
     }
-
-    .theme-toggle {
-      display: inline-flex;
-      min-height: 44px;
-      align-items: center;
-      margin: 10px 0 14px;
-      padding: 0 14px;
-      border: 1px solid #665477;
-      border-radius: 10px;
-      background: #21192d;
-      color: #f5f0e8;
-      cursor: pointer;
-      font: inherit;
-      font-size: .82rem;
-      font-weight: 700;
-    }
-    .theme-toggle:disabled { cursor: default; opacity: .55; }
 
     .wins-strip {
       display: flex;
@@ -539,7 +517,6 @@
     <main class="game">
     <a class="home-link" href="./lobby.html">← Back to TAX Casino</a>
     <h1>🐔 Chicken Road</h1>
-    <div><button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to light theme</button></div>
 
     <div class="wins-strip" aria-live="polite">
       <span class="live-dot">● Recent wins</span>
@@ -574,7 +551,6 @@
               <option value="10">10</option>
             </select>
           </label>
-        </div>
         <div class="bet-row">
           <button class="chip-btn edge" id="bet-min" type="button" data-lock>MIN</button>
           <button class="chip-btn" type="button" data-lock data-preset="0.50">0.5</button>
@@ -624,7 +600,6 @@
     const settingsForm = document.querySelector("#settings");
     const laneCountInput = document.querySelector("#lane-count");
     const wagerInput = document.querySelector("#wager");
-    const themeToggle = document.querySelector("#theme-toggle");
     const road = document.querySelector("#road");
     const message = document.querySelector("#message");
     const crossButton = document.querySelector("#cross");
@@ -805,7 +780,7 @@
     }
 
     function updateMaxWin() {
-      const table = ladder();
+      const table = displayLadder();
       let wager = parseWagerCents(wagerInput.value);
       if (!Number.isSafeInteger(wager) || wager < MIN_WAGER_CENTS) wager = wagerCents;
       const count = Number(laneCountInput.value) || lanes;
@@ -820,28 +795,48 @@
       return LANE_LADDERS[difficulty] || LANE_LADDERS.medium;
     }
 
-    function updateTheme(theme) {
-      document.documentElement.dataset.theme = theme;
-      const isLight = theme === "light";
-      gameMode = isLight ? "luck" : "fixed";
-      themeToggle.setAttribute("aria-pressed", String(isLight));
-      themeToggle.textContent = isLight
-        ? "Switch to dark theme"
-        : "Switch to light theme";
-      themeToggle.title = isLight
-        ? "Switches to the dark theme"
-        : "Switches to the light theme";
-      document.querySelector('meta[name="theme-color"]').content = isLight ? "#f4eff8" : "#100b1c";
-      localStorage.setItem("chicken-theme", theme);
+    // Per-round authoritative multipliers from /api/chicken/rounds. Stored
+    // separately so the shared LANE_LADDERS constant is never mutated.
+    let serverTable = null;
+    function displayLadder() {
+      if (serverTable && serverTable.difficulty === difficulty && serverTable.lanes === lanes
+          && Array.isArray(serverTable.mults) && serverTable.mults.length === lanes) {
+        return serverTable.mults;
+      }
+      return ladder();
     }
 
-    themeToggle.addEventListener("click", () => {
-      if (themeToggle.disabled) return;
-      updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
-      if (!betPlaced) startRound();
+    // Global casino theme (set in Account). Visual theme always applies;
+    // gameMode is locked once a bet is placed so a mid-round theme change
+    // can't flip the round's odds.
+    const THEME_KEY = "tax-global-theme";
+    const LEGACY_THEME_KEY = "chicken-theme";
+    function readStoredTheme() {
+      try {
+        return localStorage.getItem(THEME_KEY)
+          || localStorage.getItem(LEGACY_THEME_KEY)
+          || "dark";
+      } catch {
+        return "dark";
+      }
+    }
+    function applyTheme(theme) {
+      const normalized = theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme = normalized;
+      if (!betPlaced && !roundBusy) gameMode = normalized === "light" ? "luck" : "fixed";
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = normalized === "light" ? "#f4eff8" : "#100b1c";
+    }
+    function syncThemeFromStorage() {
+      applyTheme(readStoredTheme());
+    }
+    applyTheme(readStoredTheme());
+    window.addEventListener("storage", (event) => {
+      if (event.key === THEME_KEY || event.key === LEGACY_THEME_KEY) syncThemeFromStorage();
     });
-
-    updateTheme(localStorage.getItem("chicken-theme") === "light" ? "light" : "dark");
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) syncThemeFromStorage();
+    });
 
     async function api(path, body) {
       if (window.location.protocol === "file:") {
@@ -863,7 +858,9 @@
         throw new Error("The server returned an invalid response. Please try again.");
       }
       if (!response.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+        const error = new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+        error.status = response.status;
+        throw error;
       }
       return data;
     }
@@ -919,7 +916,7 @@
 
     function renderRoad() {
       road.replaceChildren();
-      const table = ladder();
+      const table = displayLadder();
       const fragment = document.createDocumentFragment();
       for (let lane = 0; lane < lanes; lane += 1) {
         const cell = document.createElement("div");
@@ -986,17 +983,17 @@
       earnedCents = 0;
       betPlaced = false;
       roundId = null;
+      serverTable = null;
       laneCountInput.value = lanes;
       wagerInput.value = (wagerCents / 100).toFixed(2);
       renderRoad();
       message.textContent = balanceCents >= wagerCents && wagerCents >= MIN_WAGER_CENTS
-        ? `Set your bet and press GO! First lane pays ×${ladder()[0]}.`
+        ? `Set your bet and press GO! First lane pays ×${displayLadder()[0]}.`
         : "Your account balance is too low for this bet.";
       message.className = "message";
       crossButton.hidden = false;
       crossButton.disabled = false;
       cashOutButton.hidden = false;
-      themeToggle.disabled = false;
       updateCashOut();
       playAgainRow.hidden = true;
       setControlsDisabled(false);
@@ -1019,17 +1016,15 @@
             difficulty = round.difficulty;
             syncDiffButtons();
           }
-          if (Array.isArray(round.multipliers) && round.multipliers.length === lanes) {
-            round.multipliers.forEach((mult, step) => {
-              if (typeof mult === "number" && mult > 0) ladder()[step] = mult;
-            });
+          if (Array.isArray(round.multipliers) && round.multipliers.length === lanes
+              && round.multipliers.every((mult) => typeof mult === "number" && mult > 0)) {
+            serverTable = { difficulty, lanes, mults: round.multipliers.slice() };
             renderRoad();
           }
           betPlaced = true;
           updateBalanceDisplay();
           updateWagerLimit();
           setControlsDisabled(true);
-          themeToggle.disabled = true;
         } catch (error) {
           roundBusy = false;
           crossButton.disabled = false;
@@ -1060,11 +1055,11 @@
               hit.remove();
               if (bird) bird.textContent = "💥";
               revealLanes(result.lanes);
-              completeRound("Crash! A car got the chicken. Earned payouts stay in your balance.", "lose", { result: "crashed", lane: currentLane });
-            }, 600);
+              completeRound("Crash! A car got the chicken. Earlier payouts from this round were revoked.", "lose", { result: "crashed", lane: currentLane });
+            }, 300);
           } else {
             revealLanes(result.lanes);
-            completeRound("Crash! The round is over. Earned payouts stay in your balance.", "lose");
+            completeRound("Crash! The round is over. Earlier payouts from this round were revoked.", "lose");
           }
           return;
         }
@@ -1127,7 +1122,6 @@
         : 0;
       updateWagerLimit();
       setControlsDisabled(false);
-      themeToggle.disabled = false;
       playAgainRow.hidden = false;
       playAgainButton.focus();
     }
@@ -1253,6 +1247,7 @@
     }
 
     window.addEventListener("focus", () => {
+      syncThemeFromStorage();
       if (!betPlaced && !roundBusy) void refreshBalance();
     });
 

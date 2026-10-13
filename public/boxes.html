@@ -85,11 +85,6 @@
       box-shadow: inset 0 0 35px rgba(67, 42, 83, .08), 0 10px 30px rgba(56, 34, 74, .1);
     }
     [data-theme="light"] .message { color: #51445b; }
-    [data-theme="light"] .theme-toggle {
-      border-color: #cbbbd8;
-      background: #fff;
-      color: #49345a;
-    }
 
     .eyebrow {
       margin: 0 0 8px;
@@ -272,28 +267,6 @@
       color: #49345a;
     }
 
-    .theme-toggle {
-      display: inline-flex;
-      min-height: 44px;
-      align-items: center;
-      justify-content: center;
-      margin: 14px 0 20px;
-      padding: 0 15px;
-      border: 1px solid #665477;
-      border-radius: 12px;
-      background: #21192d;
-      color: #f5f0e8;
-      cursor: pointer;
-      font: inherit;
-      font-size: .9rem;
-      font-weight: 700;
-    }
-
-    .theme-toggle:focus-visible {
-      outline: 3px solid #f0c96b;
-      outline-offset: 2px;
-    }
-
     .stat {
       padding: 12px 8px;
       border: 1px solid rgba(240, 201, 107, .25);
@@ -473,7 +446,6 @@
     <main class="game">
     <a class="home-link" href="./lobby.html">← Back to TAX Casino</a>
     <h1>Pick a Box</h1>
-    <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to light theme</button>
     <form class="settings" id="settings">
       <label class="setting" for="row-count">
         Rows
@@ -527,7 +499,6 @@
     const settingsForm = document.querySelector("#settings");
     const rowCountInput = document.querySelector("#row-count");
     const wagerInput = document.querySelector("#wager");
-    const themeToggle = document.querySelector("#theme-toggle");
     const board = document.querySelector("#board");
     const message = document.querySelector("#message");
     const cashOutButton = document.querySelector("#cash-out");
@@ -553,28 +524,42 @@
     let roundId = null;
     let settingsDirty = false;
 
-    function updateTheme(theme, updateRoundMode = false) {
-      document.documentElement.dataset.theme = theme;
-      const isLight = theme === "light";
-      gameMode = isLight ? "luck" : "fixed";
-      themeToggle.setAttribute("aria-pressed", String(isLight));
-      themeToggle.textContent = isLight
-        ? "Switch to dark theme"
-        : "Switch to light theme";
-      themeToggle.title = isLight
-        ? "Switches to the dark theme"
-        : "Switches to the light theme";
-      document.querySelector('meta[name="theme-color"]').content = isLight ? "#f4eff8" : "#100b1c";
-      localStorage.setItem("pickbox-theme", theme);
-      if (updateRoundMode) markSettingsDirty();
+    // Global casino theme (set in Account). Visual theme always applies;
+    // gameMode is locked once a bet is placed so a mid-round theme change
+    // can't flip the round's odds.
+    const THEME_KEY = "tax-global-theme";
+    const LEGACY_THEME_KEY = "pickbox-theme";
+    function readStoredTheme() {
+      try {
+        return localStorage.getItem(THEME_KEY)
+          || localStorage.getItem(LEGACY_THEME_KEY)
+          || "dark";
+      } catch {
+        return "dark";
+      }
     }
-
-    themeToggle.addEventListener("click", () => {
-      if (themeToggle.disabled) return;
-      updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true);
+    function applyTheme(theme) {
+      const normalized = theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme = normalized;
+      if (!betPlaced && !roundBusy) gameMode = normalized === "light" ? "luck" : "fixed";
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = normalized === "light" ? "#f4eff8" : "#100b1c";
+    }
+    function syncThemeFromStorage() {
+      applyTheme(readStoredTheme());
+      if (!betPlaced) updateActiveRow();
+    }
+    applyTheme(readStoredTheme());
+    window.addEventListener("focus", () => {
+      syncThemeFromStorage();
+      if (!betPlaced && !roundBusy) void refreshBalance();
     });
-
-    updateTheme(localStorage.getItem("pickbox-theme") === "light" ? "light" : "dark");
+    window.addEventListener("storage", (event) => {
+      if (event.key === THEME_KEY || event.key === LEGACY_THEME_KEY) syncThemeFromStorage();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) syncThemeFromStorage();
+    });
 
 
 
@@ -605,7 +590,9 @@
         throw new Error("The server returned an invalid response. Please try again.");
       }
       if (!response.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+        const error = new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
+        error.status = response.status;
+        throw error;
       }
       return data;
     }
@@ -716,7 +703,6 @@
     });
 
     function updateActiveRow(focusActiveRow = false) {
-      themeToggle.disabled = betPlaced && !roundComplete;
       board.querySelectorAll(".board-row").forEach((rowElement, index) => {
         const canContinue = betPlaced || (balanceCents >= wagerCents && wagerCents >= MIN_WAGER_CENTS);
         const isActive = index === currentRow && !roundComplete && !roundBusy && !settingsDirty && canContinue;
@@ -750,7 +736,6 @@
           updateBalanceDisplay();
           updateWagerLimit();
           setSettingsDisabled(true);
-          themeToggle.disabled = true;
         } catch (error) {
           roundBusy = false;
           message.textContent = error.message;
@@ -766,7 +751,7 @@
 
       window.setTimeout(() => {
         submitPick(selectedBox, row);
-      }, 350);
+      }, 150);
     }
 
     async function submitPick(selectedBox, row) {
@@ -831,12 +816,13 @@
     function revealRemainingBoxes(safeColumns) {
       board.querySelectorAll(".box").forEach((box) => {
         if (!box.classList.contains("revealed")) {
-          if (gameMode === "fixed") {
+          const row = Number(box.dataset.row);
+          const column = Number(box.dataset.column);
+          const safeColumn = Array.isArray(safeColumns) ? safeColumns[row] : undefined;
+          if (safeColumn === undefined) {
+            // Authoritative layout missing: random reveal, display only.
             revealBox(box, Math.random() < 0.5);
           } else {
-            const row = Number(box.dataset.row);
-            const column = Number(box.dataset.column);
-            const safeColumn = safeColumns[row];
             const isSafe = safeColumn === null
               || safeColumn === column
               || (Array.isArray(safeColumn) && safeColumn.includes(column));
@@ -877,7 +863,7 @@
 
     function finishRound(safeColumns, won = false) {
       revealRemainingBoxes(safeColumns);
-      completeRound(won ? "You reached the top row! The round is a win." : "Bomb! The round is over. Any earned payout stays in your balance.", won ? "win" : "lose", !won);
+      completeRound(won ? "You reached the top row! The round is a win." : "Bomb! The round is over. Earlier payouts from this round were revoked.", won ? "win" : "lose", !won);
     }
 
     async function cashOut() {
@@ -970,10 +956,6 @@
         // Keep the current display; the next action revalidates server-side.
       }
     }
-
-    window.addEventListener("focus", () => {
-      if (!betPlaced && !roundBusy) void refreshBalance();
-    });
 
     void initialize();
   </script>
