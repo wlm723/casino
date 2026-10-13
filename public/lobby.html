@@ -878,6 +878,7 @@
         <span class="balance-value" id="balance-value">€0.00</span>
       </div>
       <span class="username" id="username"></span>
+      <button class="utility-button" id="menu-theme" type="button" aria-pressed="false" title="Switch to the light theme">☀ Light theme</button>
       <button class="utility-button" id="mute-toggle" type="button" aria-pressed="true">
         <span aria-hidden="true" id="mute-icon">◖</span>
         <span class="mute-label" id="mute-label">Sound: Off</span>
@@ -1098,6 +1099,7 @@
       scrim: document.querySelector("#scrim"),
       menuToggle: document.querySelector("#menu-toggle"),
       menuClose: document.querySelector("#menu-close"),
+      menuTheme: document.querySelector("#menu-theme"),
       content: document.querySelector("#lobby-content"),
       footer: document.querySelector("#site-footer"),
       username: document.querySelector("#username"),
@@ -1146,22 +1148,47 @@
       link.addEventListener("click", () => setNav(false));
     });
 
-    // Global casino theme (set in Account): visual only here, no game odds.
+    // Global casino theme: the drawer switch writes the shared key, and
+    // legacy per-game keys stay in sync so older open tabs follow along.
+    const THEME_KEY = "tax-global-theme";
+    const LEGACY_KEYS = ["plinko-theme", "pickbox-theme", "chicken-theme", "aviator-theme"];
     function readStoredTheme() {
       try {
-        const legacy = ["plinko-theme", "pickbox-theme", "chicken-theme", "aviator-theme"]
+        const legacy = LEGACY_KEYS
           .map((k) => localStorage.getItem(k))
           .find((t) => t === "light" || t === "dark");
-        return localStorage.getItem("tax-global-theme") || legacy || "dark";
+        return localStorage.getItem(THEME_KEY) || legacy || "dark";
       } catch {
         return "dark";
       }
     }
+    function paintMenuTheme(isLight) {
+      if (!elements.menuTheme) return;
+      elements.menuTheme.setAttribute("aria-pressed", String(isLight));
+      elements.menuTheme.textContent = isLight ? "☾ Dark theme" : "☀ Light theme";
+      elements.menuTheme.title = isLight ? "Switch to the dark theme" : "Switch to the light theme";
+    }
     function applyGlobalTheme(theme) {
       const normalized = theme === "light" ? "light" : "dark";
       document.documentElement.dataset.theme = normalized;
+      paintMenuTheme(normalized === "light");
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.content = normalized === "light" ? "#f4eff8" : "#100b1c";
+      try {
+        // Skip writes when nothing changed: every write fires `storage`
+        // in other open tabs, and blind rewrites cascade between them.
+        if (localStorage.getItem(THEME_KEY) !== normalized) {
+          localStorage.setItem(THEME_KEY, normalized);
+        }
+        LEGACY_KEYS.forEach((k) => {
+          if (localStorage.getItem(k) !== normalized) localStorage.setItem(k, normalized);
+        });
+      } catch {}
+    }
+    if (elements.menuTheme) {
+      elements.menuTheme.addEventListener("click", () => {
+        applyGlobalTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+      });
     }
     applyGlobalTheme(readStoredTheme());
     window.addEventListener("storage", (event) => {

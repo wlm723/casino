@@ -622,6 +622,7 @@
         <span class="balance-value" id="balance-value">€0.00</span>
       </div>
       <span class="username" id="username"></span>
+      <button class="utility-button" id="menu-theme" type="button" aria-pressed="false" title="Switch to the light theme">☀ Light theme</button>
       <button class="logout-button" id="logout-button" type="button">Log out</button>
     </div>
   </nav>
@@ -704,6 +705,7 @@
       scrim: document.querySelector("#scrim"),
       menuToggle: document.querySelector("#menu-toggle"),
       menuClose: document.querySelector("#menu-close"),
+      menuTheme: document.querySelector("#menu-theme"),
       username: document.querySelector("#username"),
       balance: document.querySelector("#balance-value"),
       profileUsername: document.querySelector("#profile-username"),
@@ -806,6 +808,11 @@
       elements.themeToggle.title = isLight
         ? "Switches to the dark theme"
         : "Switches to the light theme";
+      if (elements.menuTheme) {
+        elements.menuTheme.setAttribute("aria-pressed", String(isLight));
+        elements.menuTheme.textContent = isLight ? "☾ Dark theme" : "☀ Light theme";
+        elements.menuTheme.title = isLight ? "Switch to the dark theme" : "Switch to the light theme";
+      }
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.content = isLight ? "#f4eff8" : "#100b1c";
       try {
@@ -823,6 +830,12 @@
     elements.themeToggle.addEventListener("click", () => {
       updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
     });
+
+    if (elements.menuTheme) {
+      elements.menuTheme.addEventListener("click", () => {
+        updateTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+      });
+    }
 
     try {
       updateTheme(readStoredTheme());
