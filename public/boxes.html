@@ -523,6 +523,7 @@
         <button class="chip-btn" type="button" data-preset="2">2</button>
         <button class="chip-btn" type="button" data-preset="10">10</button>
         <button class="chip-btn edge" id="bet-max" type="button">MAX</button>
+        <button class="chip-btn" id="sound-toggle" type="button" aria-pressed="true">Sound: On</button>
       </div>
       <button class="play-again" type="submit">Apply Settings</button>
     </form>
@@ -561,6 +562,7 @@
     const winsDisplay = document.querySelector("#wins");
     const lossesDisplay = document.querySelector("#losses");
     const roundsDisplay = document.querySelector("#rounds");
+    const soundToggle = document.querySelector("#sound-toggle");
     const settingsControls = settingsForm.querySelectorAll("select, input, button[type='submit']");
     const presetButtons = [...settingsForm.querySelectorAll("[data-preset], #bet-min, #bet-max, #bet-down, #bet-up")];
 
@@ -616,6 +618,61 @@
     });
 
 
+
+    // --- sound (WebAudio, no files) ---
+    const SOUND_KEY = "pickbox-sound";
+    let soundOn = true;
+    try {
+      soundOn = localStorage.getItem(SOUND_KEY) !== "off";
+    } catch {
+      soundOn = true;
+    }
+    let audioCtx = null;
+    function tone(freq, dur, type = "sine", when = 0, vol = 0.15) {
+      if (!soundOn) return;
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return;
+        audioCtx = audioCtx || new Ctor();
+        if (audioCtx.state === "suspended") void audioCtx.resume();
+        const t = audioCtx.currentTime + when;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + dur + 0.02);
+      } catch {
+        // Audio unavailable: game stays silent.
+      }
+    }
+    const sfx = {
+      pick: () => tone(520, 0.08, "square", 0, 0.07),
+      diamond: () => { tone(880, 0.12, "sine", 0, 0.15); tone(1320, 0.18, "sine", 0.09, 0.15); },
+      bomb: () => tone(140, 0.45, "sawtooth", 0, 0.2),
+      cash: () => { tone(660, 0.12, "sine", 0, 0.15); tone(990, 0.2, "sine", 0.1, 0.15); },
+      win: () => { [523, 659, 784, 1047].forEach((freq, index) => tone(freq, 0.16, "triangle", index * 0.11, 0.15)); }
+    };
+
+    function syncSoundButton() {
+      soundToggle.setAttribute("aria-pressed", String(soundOn));
+      soundToggle.textContent = soundOn ? "Sound: On" : "Sound: Off";
+    }
+
+    soundToggle.addEventListener("click", () => {
+      soundOn = !soundOn;
+      try {
+        localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
+      } catch {
+        // Preference not saved; session choice still applies.
+      }
+      syncSoundButton();
+    });
+    syncSoundButton();
 
     function markSettingsDirty() {
       settingsDirty = true;
@@ -815,6 +872,7 @@
 
       selectedBox.classList.add("picked");
       selectedBox.classList.add("opening");
+      sfx.pick();
 
       window.setTimeout(() => {
         submitPick(selectedBox, row);
@@ -830,9 +888,11 @@
         balanceCents = result.balanceCents;
         revealBox(selectedBox, !result.safe, true);
         if (!result.safe) {
+          sfx.bomb();
           finishRound(result.safeColumns);
           return;
         }
+        sfx.diamond();
 
         wins += 1;
         const payoutCents = Number.isSafeInteger(result.payoutCents) && result.payoutCents >= 0
@@ -937,6 +997,7 @@
 
     function finishRound(safeColumns, won = false) {
       revealRemainingBoxes(safeColumns);
+      if (won) sfx.win();
       completeRound(won ? "You reached the top row! The round is a win." : "Bomb! The round is over. Earlier payouts from this round were revoked.", won ? "win" : "lose", !won);
     }
 
@@ -949,6 +1010,7 @@
         const result = await api(`/api/pickbox/rounds/${roundId}/cashout`, {});
         balanceCents = result.balanceCents;
         revealRemainingBoxes(result.safeColumns);
+        sfx.cash();
         completeRound(`Round ended. Your balance is ${formatCurrency(balanceCents)}.`, "win");
       } catch (error) {
         if (error.message.includes("no longer active")) {

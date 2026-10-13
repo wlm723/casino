@@ -912,6 +912,18 @@
     </section>
 
     <div class="lobby-panels">
+      <section class="panel" aria-labelledby="bonus-title">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">Free chips, daily</p>
+            <h2 id="bonus-title">Daily Bonus</h2>
+          </div>
+          <button class="utility-button" id="bonus-claim" type="button">Claim €5.00</button>
+        </div>
+        <p class="panel-message" id="bonus-copy">Come back every day for free chips.</p>
+        <p class="panel-message" id="bonus-countdown" role="status" hidden></p>
+      </section>
+
       <section class="panel" aria-labelledby="devices-title">
         <div class="panel-heading">
           <div>
@@ -1112,7 +1124,10 @@
       logoutButton: document.querySelector("#logout-button"),
       sessionList: document.querySelector("#session-list"),
       sessionsError: document.querySelector("#sessions-error"),
-      revokeOthers: document.querySelector("#revoke-others")
+      revokeOthers: document.querySelector("#revoke-others"),
+      bonusClaim: document.querySelector("#bonus-claim"),
+      bonusCopy: document.querySelector("#bonus-copy"),
+      bonusCountdown: document.querySelector("#bonus-countdown")
     };
 
     // Universal balance: server stores euros as integer balance_cents.
@@ -1120,6 +1135,92 @@
     const euroFormat = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
     const formatBalance = (cents) => euroFormat.format(cents / 100);
     const MUTE_STORAGE_KEY = "lucky-chips-muted";
+    // --- sound (WebAudio, no files). The sidebar mute toggle gates these. ---
+    let audioCtx = null;
+    function tone(freq, dur, type = "sine", when = 0, vol = 0.12) {
+      if (muted) return;
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return;
+        audioCtx = audioCtx || new Ctor();
+        if (audioCtx.state === "suspended") void audioCtx.resume();
+        const t = audioCtx.currentTime + when;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + dur + 0.02);
+      } catch {
+        // Audio unavailable: lobby stays silent.
+      }
+    }
+    const sfx = {
+      click: () => tone(620, 0.07, "square", 0, 0.06),
+      fanfare: () => { [523, 659, 784, 1047, 1319].forEach((freq, index) => tone(freq, 0.18, "triangle", index * 0.1, 0.14)); }
+    };
+
+    // --- daily bonus (€5 every 24h, server-enforced) ---
+    let bonusNextAt = 0;
+    function bonusCountdownText() {
+      const ms = bonusNextAt - Date.now();
+      if (!(ms > 0)) return "";
+      const hours = Math.floor(ms / 3600000);
+      const mins = Math.max(1, Math.ceil((ms % 3600000) / 60000));
+      return hours > 0 ? `Next bonus in ${hours}h ${mins}m` : `Next bonus in ${mins}m`;
+    }
+    function paintBonus(state) {
+      if (!state) return;
+      bonusNextAt = Number(state.nextClaimAt) || 0;
+      const claimable = state.claimable === true;
+      elements.bonusClaim.disabled = !claimable;
+      elements.bonusClaim.textContent = claimable ? `Claim ${formatBalance(state.bonusCents)}` : "Claimed ✓";
+      elements.bonusCopy.textContent = claimable
+        ? "Your free daily chips are ready."
+        : (state.claimed ? "Bonus claimed. Come back tomorrow for more." : "Come back every day for free chips.");
+      const text = bonusCountdownText();
+      elements.bonusCountdown.hidden = claimable || !text;
+      elements.bonusCountdown.textContent = text;
+    }
+    async function loadBonus() {
+      try {
+        paintBonus(await api("/api/bonus"));
+      } catch {
+        // Bonus panel stays in its default state; balance still works.
+      }
+    }
+    window.setInterval(() => {
+      const text = bonusNextAt > Date.now() ? bonusCountdownText() : "";
+      if (text) {
+        elements.bonusCountdown.hidden = false;
+        elements.bonusCountdown.textContent = text;
+      } else if (bonusNextAt) {
+        void loadBonus();
+      }
+    }, 30000);
+    elements.bonusClaim.addEventListener("click", async () => {
+      elements.bonusClaim.disabled = true;
+      try {
+        const result = await api("/api/bonus/claim", { method: "POST" });
+        renderBalance(result.balanceCents);
+        sfx.fanfare();
+        paintBonus({ bonusCents: result.bonusCents, claimed: true, claimable: false, nextClaimAt: result.nextClaimAt });
+      } catch (error) {
+        if (error.status === 429 && error.data && error.data.nextClaimAt) {
+          paintBonus({ bonusCents: 500, claimed: true, claimable: false, nextClaimAt: error.data.nextClaimAt });
+        } else {
+          showStatus(error.message);
+          void loadBonus();
+        }
+      }
+    });
+    elements.gameGrid.addEventListener("click", (event) => {
+      if (event.target.closest("a.play-button")) sfx.click();
+    });
     let currentUsername = "";
     let currentBalance = 0;
     let balanceFrame = 0;
@@ -1217,6 +1318,7 @@
       if (!response.ok) {
         const error = new Error(typeof data.error === "string" ? data.error : "Request failed. Please try again.");
         error.status = response.status;
+        error.data = data;
         throw error;
       }
       return data;
@@ -1548,6 +1650,7 @@
         renderBalance(user.balanceCents);
         renderGames();
         await loadSessions();
+        await loadBonus();
         elements.sidebar.hidden = false;
         elements.content.hidden = false;
         elements.footer.hidden = false;
@@ -1563,7 +1666,10 @@
 
     window.addEventListener("focus", () => {
       applyGlobalTheme(readStoredTheme());
-      if (sessionReady) void refreshSession();
+      if (sessionReady) {
+        void refreshSession();
+        void loadBonus();
+      }
     });
     initialize();
   </script>

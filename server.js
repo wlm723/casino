@@ -242,6 +242,54 @@ app.get("/api/me", authenticate, (req, res) => {
   res.json({ username: req.user.username, balanceCents: safeCents(req.user.balance_cents) });
 });
 
+// Daily bonus: €5 every 24h. The claim is a single conditional UPDATE so
+// two tabs claiming at once still pay only once.
+const BONUS_CENTS = 500;
+const BONUS_COOLDOWN_MS = 24 * 3600 * 1000;
+
+app.get("/api/bonus", authenticate, asyncRoute(async (req, res) => {
+  const { rows } = await database.query(
+    "SELECT last_bonus_at FROM users WHERE id = $1",
+    [req.user.id]
+  );
+  const last = Number(rows[0]?.last_bonus_at) || 0;
+  const now = Date.now();
+  res.json({
+    bonusCents: BONUS_CENTS,
+    claimed: last > 0,
+    claimable: now >= last + BONUS_COOLDOWN_MS,
+    nextClaimAt: last + BONUS_COOLDOWN_MS,
+    now
+  });
+}));
+
+app.post("/api/bonus/claim", authenticate, asyncRoute(async (req, res) => {
+  const now = Date.now();
+  const { rows } = await database.query(
+    `UPDATE users
+     SET balance_cents = balance_cents + $2, last_bonus_at = $3
+     WHERE id = $1 AND last_bonus_at + $4 <= $3
+     RETURNING balance_cents`,
+    [req.user.id, BONUS_CENTS, now, BONUS_COOLDOWN_MS]
+  );
+  if (!rows[0]) {
+    const { rows: current } = await database.query(
+      "SELECT last_bonus_at FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    const last = Number(current[0]?.last_bonus_at) || 0;
+    return res.status(429).json({
+      error: "Bonus already claimed. Come back tomorrow.",
+      nextClaimAt: last + BONUS_COOLDOWN_MS
+    });
+  }
+  res.json({
+    bonusCents: BONUS_CENTS,
+    balanceCents: safeCents(rows[0].balance_cents),
+    nextClaimAt: now + BONUS_COOLDOWN_MS
+  });
+}));
+
 async function listSessions(userId) {
   const { rows } = await database.query(
     "SELECT token_hash, created_at, expires_at, ip, user_agent FROM sessions WHERE user_id = $1 AND expires_at > $2 ORDER BY created_at DESC",

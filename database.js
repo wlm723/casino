@@ -35,6 +35,7 @@ const SCHEMA_STATEMENTS = [
   $migration$;`,
   "ALTER TABLE users ALTER COLUMN balance_cents SET DEFAULT 10000;",
   "ALTER TABLE users ALTER COLUMN balance_cents SET NOT NULL;",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_bonus_at BIGINT NOT NULL DEFAULT 0;",
   `CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_unique
   ON users (LOWER(username));`,
   `CREATE TABLE IF NOT EXISTS sessions (
