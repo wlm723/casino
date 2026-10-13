@@ -355,6 +355,27 @@
     .chip-btn:disabled { cursor: default; opacity: .45; }
     .chip-btn.edge { border-color: rgba(240, 201, 107, .5); color: #ffe8a4; }
 
+    .bet-stepper { display: flex; align-items: stretch; gap: 8px; }
+    .bet-display {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step-btn {
+      min-height: 44px;
+      min-width: 52px;
+      padding: 0 12px;
+      border: 1px solid rgba(240, 201, 107, .5);
+      border-radius: 10px;
+      background: #21192d;
+      color: #ffe8a4;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1.15rem;
+      font-weight: 800;
+    }
+    .step-btn:disabled { cursor: default; opacity: .45; }
+
     .diff-row {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -557,7 +578,12 @@
           <button class="chip-btn" type="button" data-lock data-preset="1">1</button>
           <button class="chip-btn" type="button" data-lock data-preset="2">2</button>
           <button class="chip-btn" type="button" data-lock data-preset="10">10</button>
-          <input class="bet-input" id="wager" name="wager" type="number" min="0.10" max="100" value="10" step="0.01" required aria-label="Bet amount in euros">
+          <input class="bet-input" id="wager" name="wager" type="hidden" value="10.00">
+          <div class="bet-stepper" role="group" aria-label="Bet amount in euros">
+            <button class="step-btn" id="bet-down" type="button" data-lock aria-label="Decrease bet by €0.10">−</button>
+            <output class="bet-input bet-display" id="wager-display" aria-live="polite">€10.00</output>
+            <button class="step-btn" id="bet-up" type="button" data-lock aria-label="Increase bet by €0.10">+</button>
+          </div>
           <button class="chip-btn edge" id="bet-max" type="button" data-lock>MAX</button>
         </div>
       </form>
@@ -600,6 +626,7 @@
     const settingsForm = document.querySelector("#settings");
     const laneCountInput = document.querySelector("#lane-count");
     const wagerInput = document.querySelector("#wager");
+    const wagerDisplay = document.querySelector("#wager-display");
     const road = document.querySelector("#road");
     const message = document.querySelector("#message");
     const crossButton = document.querySelector("#cross");
@@ -874,6 +901,19 @@
       return Number.isSafeInteger(cents) ? cents : NaN;
     }
 
+    // Bets move in €0.10 intervals via the stepper arrows only — the hidden
+    // input always holds a valid step, the output shows it, no free entry.
+    const STEP_CENTS = 10;
+    function betCap() { return Math.min(balanceCents, 10000); }
+    function snapWagerDown(cents) { return Math.floor(cents / STEP_CENTS) * STEP_CENTS; }
+    function writeWager(cents) {
+      const max = Math.max(betCap(), MIN_WAGER_CENTS);
+      const snapped = Math.max(MIN_WAGER_CENTS, Math.min(Math.round(cents / STEP_CENTS) * STEP_CENTS, max));
+      wagerInput.value = (snapped / 100).toFixed(2);
+      if (wagerDisplay) wagerDisplay.textContent = formatCurrency(snapped);
+      return snapped;
+    }
+
     function formatCurrency(cents) {
       return new Intl.NumberFormat("en-IE", {
         style: "currency",
@@ -897,14 +937,16 @@
 
       if (maxWagerCents < MIN_WAGER_CENTS) {
         wagerInput.value = 0;
+        if (wagerDisplay) wagerDisplay.textContent = formatCurrency(0);
         return;
       }
 
       const enteredCents = parseWagerCents(wagerInput.value);
       if (!Number.isSafeInteger(enteredCents) || enteredCents > maxWagerCents) {
-        wagerInput.value = (maxWagerCents / 100).toFixed(2);
-      } else if (enteredCents < MIN_WAGER_CENTS) {
-        wagerInput.value = (Math.min(wagerCents, maxWagerCents) / 100).toFixed(2);
+        wagerInput.value = (snapWagerDown(maxWagerCents) / 100).toFixed(2);
+        if (wagerDisplay) wagerDisplay.textContent = formatCurrency(snapWagerDown(maxWagerCents));
+      } else {
+        writeWager(Math.min(enteredCents, maxWagerCents));
       }
     }
 
@@ -962,9 +1004,9 @@
 
     function readSettings() {
       lanes = Number(laneCountInput.value);
-      wagerCents = parseWagerCents(wagerInput.value);
+      wagerCents = snapWagerDown(parseWagerCents(wagerInput.value));
       if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > balanceCents) {
-        message.textContent = "Enter a bet from €0.10 up to your available account balance.";
+        message.textContent = "Use the arrows to pick a bet from €0.10 up to your available account balance.";
         message.className = "message lose";
         return false;
       }
@@ -985,7 +1027,7 @@
       roundId = null;
       serverTable = null;
       laneCountInput.value = lanes;
-      wagerInput.value = (wagerCents / 100).toFixed(2);
+      writeWager(wagerCents);
       renderRoad();
       message.textContent = balanceCents >= wagerCents && wagerCents >= MIN_WAGER_CENTS
         ? `Set your bet and press GO! First lane pays ×${displayLadder()[0]}.`
@@ -1122,9 +1164,12 @@
       if (balanceCents >= MIN_WAGER_CENTS && wagerCents < MIN_WAGER_CENTS) {
         wagerCents = MIN_WAGER_CENTS;
       }
-      wagerInput.value = balanceCents >= MIN_WAGER_CENTS
-        ? (wagerCents / 100).toFixed(2)
-        : 0;
+      if (balanceCents >= MIN_WAGER_CENTS) {
+        writeWager(wagerCents);
+      } else {
+        wagerInput.value = 0;
+        if (wagerDisplay) wagerDisplay.textContent = formatCurrency(0);
+      }
       updateWagerLimit();
       setControlsDisabled(false);
       playAgainRow.hidden = false;
@@ -1190,18 +1235,28 @@
 
     wagerInput.addEventListener("input", updateMaxWin);
 
+    function stepWager(delta) {
+      writeWager(parseWagerCents(wagerInput.value) + delta);
+      updateMaxWin();
+    }
+
     presetButtons.forEach((button) => {
       button.addEventListener("click", () => {
-        wagerInput.value = Number(button.dataset.preset).toFixed(2);
+        writeWager(Number(button.dataset.preset) * 100);
+        updateMaxWin();
       });
     });
 
     document.querySelector("#bet-min").addEventListener("click", () => {
-      wagerInput.value = "0.10";
+      writeWager(MIN_WAGER_CENTS);
+      updateMaxWin();
     });
     document.querySelector("#bet-max").addEventListener("click", () => {
-      wagerInput.value = (Math.min(balanceCents, 10000) / 100).toFixed(2);
+      writeWager(snapWagerDown(betCap()));
+      updateMaxWin();
     });
+    document.querySelector("#bet-down").addEventListener("click", () => stepWager(-STEP_CENTS));
+    document.querySelector("#bet-up").addEventListener("click", () => stepWager(STEP_CENTS));
 
     settingsForm.addEventListener("submit", (event) => {
       event.preventDefault();

@@ -231,6 +231,38 @@
       outline-offset: 2px;
     }
 
+    .bet-stepper { display: flex; align-items: stretch; gap: 8px; }
+    .bet-stepper input[type="hidden"] { display: none; }
+    .bet-display {
+      display: inline-flex;
+      flex: 1;
+      min-width: 0;
+      min-height: 42px;
+      align-items: center;
+      justify-content: center;
+      padding: 0 11px;
+      border: 1px solid #504264;
+      border-radius: 11px;
+      background: #120e1b;
+      color: #f5f0e8;
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+    }
+    .step-btn {
+      min-height: 42px;
+      min-width: 48px;
+      padding: 0 12px;
+      border: 1px solid #504264;
+      border-radius: 11px;
+      background: #120e1b;
+      color: #ffe8a4;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+    .step-btn:disabled { cursor: default; opacity: .45; }
+
     .settings .play-again {
       grid-column: 1 / -1;
     }
@@ -265,6 +297,18 @@
       border-color: #cbbbd8;
       background: #fff;
       color: #49345a;
+    }
+
+    [data-theme="light"] .step-btn {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #49345a;
+    }
+
+    [data-theme="light"] .bet-display {
+      border-color: #cbbbd8;
+      background: #fff;
+      color: #30243a;
     }
 
     .stat {
@@ -459,10 +503,15 @@
           <option value="8">8</option>
         </select>
       </label>
-      <label class="setting" for="wager">
-        Bet amount (€)
-        <input id="wager" name="wager" type="number" min="0.10" max="100" value="10" step="0.01" required>
-      </label>
+      <div class="setting">
+        <span id="wager-label">Bet amount (€)</span>
+        <input id="wager" name="wager" type="hidden" value="10.00">
+        <div class="bet-stepper" role="group" aria-labelledby="wager-label">
+          <button class="step-btn" id="bet-down" type="button" aria-label="Decrease bet by €0.10">−</button>
+          <output class="bet-display" id="wager-display" aria-live="polite">€10.00</output>
+          <button class="step-btn" id="bet-up" type="button" aria-label="Increase bet by €0.10">+</button>
+        </div>
+      </div>
       <div class="chip-row" role="group" aria-label="Quick bet amounts">
         <button class="chip-btn edge" id="bet-min" type="button">MIN</button>
         <button class="chip-btn" type="button" data-preset="0.50">0.5</button>
@@ -499,6 +548,7 @@
     const settingsForm = document.querySelector("#settings");
     const rowCountInput = document.querySelector("#row-count");
     const wagerInput = document.querySelector("#wager");
+    const wagerDisplay = document.querySelector("#wager-display");
     const board = document.querySelector("#board");
     const message = document.querySelector("#message");
     const cashOutButton = document.querySelector("#cash-out");
@@ -508,7 +558,7 @@
     const lossesDisplay = document.querySelector("#losses");
     const roundsDisplay = document.querySelector("#rounds");
     const settingsControls = settingsForm.querySelectorAll("select, input, button[type='submit']");
-    const presetButtons = [...settingsForm.querySelectorAll("[data-preset], #bet-min, #bet-max")];
+    const presetButtons = [...settingsForm.querySelectorAll("[data-preset], #bet-min, #bet-max, #bet-down, #bet-up")];
 
     let rows = DEFAULT_ROWS;
     let wagerCents = DEFAULT_WAGER * 100;
@@ -606,6 +656,19 @@
       return Number.isSafeInteger(cents) ? cents : NaN;
     }
 
+    // Bets move in €0.10 intervals via the stepper arrows only — the input
+    // itself is readonly, so every value shown is already a valid step.
+    const STEP_CENTS = 10;
+    function betCap() { return Math.min(balanceCents, 10000); }
+    function snapWagerDown(cents) { return Math.floor(cents / STEP_CENTS) * STEP_CENTS; }
+    function writeWager(cents) {
+      const max = Math.max(betCap(), MIN_WAGER_CENTS);
+      const snapped = Math.max(MIN_WAGER_CENTS, Math.min(Math.round(cents / STEP_CENTS) * STEP_CENTS, max));
+      wagerInput.value = (snapped / 100).toFixed(2);
+      if (wagerDisplay) wagerDisplay.textContent = formatCurrency(snapped);
+      return snapped;
+    }
+
     function formatCurrency(cents) {
       return new Intl.NumberFormat("en-IE", {
         style: "currency",
@@ -624,14 +687,15 @@
 
       if (maxWagerCents < MIN_WAGER_CENTS) {
         wagerInput.value = 0;
+        if (wagerDisplay) wagerDisplay.textContent = formatCurrency(0);
         return;
       }
 
       const enteredCents = parseWagerCents(wagerInput.value);
       if (!Number.isSafeInteger(enteredCents) || enteredCents > maxWagerCents) {
-        wagerInput.value = (maxWagerCents / 100).toFixed(2);
-      } else if (enteredCents < MIN_WAGER_CENTS) {
-        wagerInput.value = (Math.min(wagerCents, maxWagerCents) / 100).toFixed(2);
+        wagerInput.value = (snapWagerDown(maxWagerCents) / 100).toFixed(2);
+      } else {
+        writeWager(Math.min(enteredCents, maxWagerCents));
       }
     }
 
@@ -653,7 +717,7 @@
       roundId = null;
       cashOutButton.disabled = false;
       rowCountInput.value = rows;
-      wagerInput.value = (wagerCents / 100).toFixed(2);
+      writeWager(wagerCents);
       board.replaceChildren();
       message.textContent = balanceCents >= wagerCents && wagerCents >= MIN_WAGER_CENTS
         ? `Choose a box in the base row (row ${rows}) to start.`
@@ -855,9 +919,12 @@
       if (balanceCents >= MIN_WAGER_CENTS && wagerCents < MIN_WAGER_CENTS) {
         wagerCents = MIN_WAGER_CENTS;
       }
-      wagerInput.value = balanceCents >= MIN_WAGER_CENTS
-        ? (wagerCents / 100).toFixed(2)
-        : 0;
+      if (balanceCents >= MIN_WAGER_CENTS) {
+        writeWager(wagerCents);
+      } else {
+        wagerInput.value = 0;
+        if (wagerDisplay) wagerDisplay.textContent = formatCurrency(0);
+      }
       updateWagerLimit();
       setSettingsDisabled(false);
       updateActiveRow();
@@ -894,15 +961,27 @@
       }
     }
 
+    function stepWager(delta) {
+      writeWager(parseWagerCents(wagerInput.value) + delta);
+      markSettingsDirty();
+    }
+
     presetButtons.forEach((button) => {
       button.addEventListener("click", () => {
         if (button.id === "bet-min") {
-          wagerInput.value = "0.10";
+          writeWager(MIN_WAGER_CENTS);
         } else if (button.id === "bet-max") {
-          wagerInput.value = (Math.min(balanceCents, 10000) / 100).toFixed(2);
+          writeWager(snapWagerDown(betCap()));
+        } else if (button.id === "bet-down") {
+          stepWager(-STEP_CENTS);
+          return;
+        } else if (button.id === "bet-up") {
+          stepWager(STEP_CENTS);
+          return;
         } else {
-          wagerInput.value = Number(button.dataset.preset).toFixed(2);
+          writeWager(Number(button.dataset.preset) * 100);
         }
+        markSettingsDirty();
       });
     });
 
@@ -911,9 +990,9 @@
       if (roundComplete && playAgainButton.hidden) return;
       if (!settingsForm.reportValidity()) return;
       rows = Number(rowCountInput.value);
-      wagerCents = parseWagerCents(wagerInput.value);
+      wagerCents = snapWagerDown(parseWagerCents(wagerInput.value));
       if (!Number.isSafeInteger(wagerCents) || wagerCents < MIN_WAGER_CENTS || wagerCents > balanceCents) {
-        message.textContent = "Enter a bet from €0.10 up to your available account balance.";
+        message.textContent = "Use the arrows to pick a bet from €0.10 up to your available account balance.";
         message.className = "message lose";
         return;
       }
@@ -924,7 +1003,7 @@
     cashOutButton.addEventListener("click", () => void cashOut());
     playAgainButton.addEventListener("click", () => void startRound());
     rowCountInput.value = DEFAULT_ROWS;
-    wagerInput.value = DEFAULT_WAGER;
+    wagerInput.value = "10.00";
 
     async function initialize() {
       if (window.location.protocol === "file:") {
