@@ -814,13 +814,17 @@
     }
 
     function revealRemainingBoxes(safeColumns) {
+      // Dark (fixed) mode: shuffle the leftover icons so the board never
+      // leaks the house layout. Display only — the round outcome was
+      // already decided server-side and paid out.
+      const shuffleLeftovers = gameMode === "fixed";
       board.querySelectorAll(".box").forEach((box) => {
         if (!box.classList.contains("revealed")) {
           const row = Number(box.dataset.row);
           const column = Number(box.dataset.column);
           const safeColumn = Array.isArray(safeColumns) ? safeColumns[row] : undefined;
-          if (safeColumn === undefined) {
-            // Authoritative layout missing: random reveal, display only.
+          if (shuffleLeftovers || safeColumn === undefined) {
+            // Shuffled (or authoritative layout missing): random reveal, display only.
             revealBox(box, Math.random() < 0.5);
           } else {
             const isSafe = safeColumn === null

@@ -1096,11 +1096,16 @@
 
     function revealLanes(serverLanes) {
       if (!Array.isArray(serverLanes)) return;
+      // Dark (fixed) mode: shuffle the leftover icons so the road never
+      // leaks the house layout. Display only — the crash/clear outcome was
+      // already decided server-side and paid out.
+      const shuffleLeftovers = gameMode === "fixed";
       serverLanes.forEach((safe, lane) => {
         if (lane < currentLane) return;
         const cell = laneCell(lane);
         if (!cell || cell.classList.contains("crashed")) return;
-        cell.querySelector(".lane-bird").textContent = safe ? "✅" : "🚗";
+        const showSafe = shuffleLeftovers ? Math.random() < 0.5 : safe;
+        cell.querySelector(".lane-bird").textContent = showSafe ? "✅" : "🚗";
       });
     }
 
