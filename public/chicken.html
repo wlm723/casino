@@ -21,6 +21,11 @@
 
     button, input, select, a { touch-action: manipulation; }
 
+    button:focus-visible, a:focus-visible, select:focus-visible {
+      outline: 3px solid #f0c96b;
+      outline-offset: 3px;
+    }
+
     body {
       min-width: 320px;
       min-height: 100vh;
@@ -932,7 +937,6 @@
 
     function updateWagerLimit() {
       const maxWagerCents = Math.min(balanceCents, 10000);
-      wagerInput.max = (maxWagerCents / 100).toFixed(2);
       wagerInput.disabled = maxWagerCents < MIN_WAGER_CENTS || (betPlaced && !roundComplete);
 
       if (maxWagerCents < MIN_WAGER_CENTS) {
@@ -1232,8 +1236,6 @@
         renderRoad();
       }
     });
-
-    wagerInput.addEventListener("input", updateMaxWin);
 
     function stepWager(delta) {
       writeWager(parseWagerCents(wagerInput.value) + delta);

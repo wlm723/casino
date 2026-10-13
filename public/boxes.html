@@ -292,6 +292,10 @@
 
     .chip-btn:disabled { cursor: default; opacity: .45; }
     .chip-btn.edge { border-color: rgba(240, 201, 107, .5); color: #ffe8a4; }
+    .chip-btn:focus-visible, .step-btn:focus-visible {
+      outline: 3px solid #f0c96b;
+      outline-offset: 2px;
+    }
 
     [data-theme="light"] .chip-btn {
       border-color: #cbbbd8;
@@ -682,7 +686,6 @@
 
     function updateWagerLimit() {
       const maxWagerCents = Math.min(balanceCents, 10000);
-      wagerInput.max = (maxWagerCents / 100).toFixed(2);
       wagerInput.disabled = maxWagerCents < MIN_WAGER_CENTS || (betPlaced && !roundComplete);
 
       if (maxWagerCents < MIN_WAGER_CENTS) {
@@ -999,7 +1002,6 @@
       startRound();
     });
     rowCountInput.addEventListener("change", markSettingsDirty);
-    wagerInput.addEventListener("input", markSettingsDirty);
     cashOutButton.addEventListener("click", () => void cashOut());
     playAgainButton.addEventListener("click", () => void startRound());
     rowCountInput.value = DEFAULT_ROWS;
